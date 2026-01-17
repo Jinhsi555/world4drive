@@ -1,0 +1,60 @@
+_target_: navsim.agents.transfuser.transfuser_agent.TransfuserAgent
+_convert_: 'all'
+
+
+config:
+  _target_: navsim.agents.transfuser.transfuser_config.TransfuserConfig
+  _convert_: 'all'
+
+  trajectory_sampling:
+    _target_: nuplan.planning.simulation.trajectory.trajectory_sampling.TrajectorySampling
+    _convert_: 'all'
+    time_horizon: 4
+    interval_length: 0.5
+
+  latent: False
+
+  ## model name
+  model_name: "W4D"  # W4D or LAW
+  model_version: 8  # 2 or 3 or 4
+
+  ## Soft responsibility (multi-modal supervision) settings
+  soft_resp: false
+  soft_resp_tau: 1.0
+  soft_resp_topk: 0
+  cls_entropy_weight: 0.1
+  use_fde_for_weights: true
+
+  ## world4drive config
+  num_mode: 4
+  traj_loss_weight: 1.0
+  traj_cls_loss_weight: 0.0
+  diversity_loss_weight: 0.0
+  diversity_margin: 1.0  # 1m
+  traj_cmd_loss_weight: 0.2
+  use_cmd_embed: true
+  use_wm: false
+  wm_loss_weight: 0.1
+  use_ar: false
+  use_ar_wm: false
+  action_chunk_size : 4
+  ar_wm_replace_prob: 0.1
+  _use_mlp_ensemble: false
+
+  #epona config
+  # closed_traj_evaluation: false
+
+  ## grpo config
+  training_mode: "sl"  # sl or ft
+  ce_loss_weight: 0.1
+  ade_best_traj_loss_weight: 0.1
+  fde_best_traj_loss_weight: 0.1
+
+  ## multi-modal trajectory vocab
+  use_vocab_trajs: false
+  vocab_trajs_dict_path: /mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/traj_pdm_v2/ori/navtrain_16384.pkl
+  vocab_trajs_path: /mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/GTRS/traj_final/16384.npy
+
+lr: 1e-4
+checkpoint_path: null
+

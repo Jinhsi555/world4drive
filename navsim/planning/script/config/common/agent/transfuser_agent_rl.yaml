@@ -1,0 +1,47 @@
+_target_: navsim.agents.transfuser.transfuser_agent.TransfuserAgent
+_convert_: 'all'
+
+
+config:
+  _target_: navsim.agents.transfuser.transfuser_config.TransfuserConfig
+  _convert_: 'all'
+
+  trajectory_sampling:
+    _target_: nuplan.planning.simulation.trajectory.trajectory_sampling.TrajectorySampling
+    _convert_: 'all'
+    time_horizon: 4
+    interval_length: 0.5
+
+  latent: False
+
+  ## model name
+  model_name: "W4D"  # W4D or LAW
+
+  ## Soft responsibility (multi-modal supervision) settings
+  soft_resp: false
+  soft_resp_tau: 1.0
+  soft_resp_topk: 0
+  cls_entropy_weight: 0.1
+  use_fde_for_weights: true
+
+  ## world4drive config
+  num_mode: 18
+  traj_loss_weight: 1.0
+  traj_cls_loss_weight: 0.2
+  diversity_loss_weight: 0.0
+  diversity_margin: 1.0  # 1m
+
+  ## grpo config
+  training_mode: "ft"  # sl or ft
+  ce_loss_weight: 0.0
+  ade_best_traj_loss_weight: 5
+  fde_best_traj_loss_weight: 5
+  only_cls_head: false
+  kl_loss_weight: 0.0000
+  entropy_loss_weight: 2
+  adv_temp: 0.5
+  diversity_end_loss_weight: 2.0
+
+lr: 1e-5
+checkpoint_path: null
+

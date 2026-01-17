@@ -1,0 +1,436 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "run metric cache",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/navsim/planning/script/run_metric_caching.py",
+            "console": "integratedTerminal",
+            "cwd": "${env:NAVSIM_DEVKIT_ROOT}",
+            "env": {
+                "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
+                "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
+                "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
+                "NAVSIM_DEVKIT_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+                "OPENSCENE_DATA_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets",
+                "HYDRA_FULL_ERROR": "1",
+            },
+            "args": [
+                "train_test_split=navtest",
+                "metric_cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/metric_cache"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Train Transfuser Agent",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/navsim/planning/script/run_training_debug.py",
+            "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+            "args": [
+                "agent=transfuser_agent",
+                "dataloader.params.batch_size=32",
+                "dataloader.params.num_workers=8",
+                "experiment_name=training_debug",
+                "train_test_split=navtrain",
+                "use_cache_without_dataset=True",
+                "force_cache_computation=False",
+                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache",
+                "worker=sequential",
+                "agent.config.model_version=3",
+                "agent.config.num_mode=3",
+                "agent.config.use_cmd_embed=False",
+                // "agent.config.action_chunk_size=4",
+                // "agent.config._use_mlp_ensemble=True",
+                // "agent.config.model_name=LAW"  // LAW or W4D
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+                "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
+                "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
+                "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
+                "NAVSIM_DEVKIT_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+                "OPENSCENE_DATA_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets",
+                "HYDRA_FULL_ERROR": "1",
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "run pdms evaluation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/navsim/planning/script/run_pdm_score_one_stage_gpu.py",
+            "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+            "args": [
+                "agent=transfuser_agent",
+                "agent.config.model_version=3",
+                "agent.config.num_mode=3",
+                "agent.config.traj_cmd_loss_weight=0",
+                "agent.checkpoint_path='/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_3mode_with_cmd_embed/2026.01.13.17.42.33/lightning_logs/version_0/checkpoints/epoch=74-step=24975.ckpt'",
+                "experiment_name=pdms_w4d_32gpu_4bs_debug",
+                "train_test_split=navtest",
+                "metric_cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/metric_cache",
+                // "use_cache_without_dataset=True",
+                // "force_cache_computation=False",
+                // "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache",
+                // "worker=sequential",
+                
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+                "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
+                "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
+                "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
+                "NAVSIM_DEVKIT_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+                "OPENSCENE_DATA_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets",
+                "HYDRA_FULL_ERROR": "1",
+                "SUBSCORE_PATH": "/noexist"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Train Transfuser grpo Agent",
+            "type": "python",
+            "request": "launch",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_training.py",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "args": [
+                "--config-name=default_training_rl",
+                "agent=transfuser_agent_rl",
+                "dataloader.params.batch_size=4",
+                "experiment_name=training_debug",
+                "train_test_split=navtrain",
+                "use_cache_without_dataset=True",
+                "force_cache_computation=False",
+                "cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/cache_for_training",
+                "worker=sequential",
+                "agent.config.training_mode=ft",
+                "agent.checkpoint_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_diff_cmd/2025.10.02.23.00.37/lightning_logs/version_0/checkpoints/epoch14.ckpt'",
+                "resume_ckpt_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_rl_lr1e-5_5decaybcloss_2adv_0.1human_sim_bs32/2025.10.05.12.04.46/lightning_logs/version_0/checkpoints/epoch=4-step=1665.ckpt'"
+            ],
+            "env": {
+                "HYDRA_FULL_ERROR": "1",
+                "CUDA_VISIBLE_DEVICES": "0",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Debug Evaluation",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_gpu_v2.py",
+            "args": [
+                "agent=transfuser_agent",
+                "agent.checkpoint_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_3mode_cmdpred_wmpred/2025.10.13.22.35.32/lightning_logs/version_0/checkpoints/epoch99.ckpt'",
+                "trainer.params.precision=32",
+                "experiment_name=eval/test-w4d-navhard_debug",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache_navhard_two_stage",
+                "train_test_split=navhard_two_stage",
+                "synthetic_sensor_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/navhard_two_stage/sensor_blobs",
+                "synthetic_scenes_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/navhard_two_stage/synthetic_scene_pickles",
+                // "worker=sequential",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_debug/eval.pkl"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug navtest Evaluation",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_gpu_navtest_v2.py",
+            "args": [
+                "agent=transfuser_agent",
+                "agent.checkpoint_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_3mode_cmdpred_wmpred/2025.10.13.22.35.32/lightning_logs/version_0/checkpoints/epoch99.ckpt'",
+                "trainer.params.precision=32",
+                "experiment_name=eval/test-w4d-navhard_debug",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache",
+                "train_test_split=navtest",
+                "synthetic_sensor_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/navhard_two_stage/sensor_blobs",
+                "synthetic_scenes_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/navhard_two_stage/synthetic_scene_pickles",
+                "agent.config.model_version=5",
+                "agent.config.use_wm=True",
+                // "worker=sequential",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_debug/eval.pkl"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug navtest one stage Evaluation",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_one_stage_gpu.py",
+            "args": [
+                "agent=transfuser_agent",
+                "agent.checkpoint_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_4mode_all_navtrain_ar_4chunk_wm/2025.10.31.22.47.36/lightning_logs/version_0/checkpoints/epoch79.ckpt'",
+                "trainer.params.precision=32",
+                "experiment_name=eval/test-w4d-navtest_debug",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache",
+                "train_test_split=navtest",
+                "agent.config.model_version=12",
+                "agent.config.use_wm=False",
+                // "agent.config.use_cmd_embed=False",
+                "agent.config.num_mode=4",
+                "agent.config.use_ar=True",
+                "agent.config.use_ar_wm=True",
+                "traffic_agents=non_reactive",
+                "worker=sequential",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_debug/eval2.pkl"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug navtest one stage Evaluation epona",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_one_stage_gpu_epona.py",
+            "args": [
+                "agent=transfuser_agent",
+                "agent.checkpoint_path='/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_4mode_all_navtrain_ar_4chunk_wm/2025.10.31.22.47.36/lightning_logs/version_0/checkpoints/epoch79.ckpt'",
+                "trainer.params.precision=32",
+                "experiment_name=eval/test-w4d-navtest_debug",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache",
+                "train_test_split=navtest",
+                "agent.config.model_version=12",
+                "agent.config.use_wm=False",
+                // "agent.config.use_cmd_embed=False",
+                "agent.config.num_mode=4",
+                "agent.config.use_ar=True",
+                "agent.config.use_ar_wm=True",
+                "traffic_agents=non_reactive",
+                // "worker=sequential",
+                "+closed_traj_evaluation=True"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/test_traj_results/360000iter_traj.pkl"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug run_pdm_score_v1_voc_save_info",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_info.py",
+            "args": [
+                "experiment_name=eval/test-w4d-navtrain_save_info",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache_training",
+                "train_test_split=navtrain",
+                "+traj_vocab_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/traj_vocab_8192_8_3.npy",
+                "+navtrain_score_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp",
+                "worker=sequential",
+            ],
+            "env": {
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/test_traj_results/460000iter_traj.pkl",
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug run_pdm_score_v2_voc_save_info",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov2.py",
+            "args": [
+                "experiment_name=eval/test-w4d-navtrain_save_info",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache_training",
+                "train_test_split=navtrain",
+                "+traj_vocab_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/traj_vocab_8192_8_3.npy",
+                "+navtrain_score_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp",
+                "+time_horizon=0.5",
+                "worker=sequential",
+            ],
+            "env": {
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/test_traj_results/460000iter_traj.pkl",
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug run_pdm_score_v2_voc_save_infov3",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov4.py",
+            "args": [
+                "experiment_name=eval/test-w4d-navtrain_save_info",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache_training",
+                "train_test_split=navtrain",
+                "+traj_vocab_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/traj_vocab_8192_8_3.npy",
+                "+navtrain_score_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp",
+                "+time_horizon=4.0",
+                "worker=sequential",
+            ],
+            "env": {
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/test_traj_results/460000iter_traj.pkl",
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug run_pdm_score_v2_voc_save_infov5",
+            "type": "python",
+            "request": "launch",
+            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov5_debug.py",
+            "args": [
+                "experiment_name=eval/test-w4d-navtrain_save_info",
+                "+cache_path=null",
+                "metric_cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/metric_cache_training",
+                "train_test_split=navtrain",
+                "+traj_vocab_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/traj_vocab_8192_8_3.npy",
+                "+navtrain_score_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp",
+                "+time_horizon=4.0",
+                // "worker=sequential",
+            ],
+            "env": {
+                "SUBSCORE_PATH": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/Epona/exp/test_traj_results/460000iter_traj.pkl",
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_DEVKIT_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive"
+            },
+            "justMyCode": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: generate trajs",
+            "type": "python",
+            "request": "launch",
+            "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
+            "program": "/data/hdd01/xingzb/workspace/navsim-main/navsim/planning/script/run_generate_trajs.py",
+            "args": [
+                "agent=transfuser_agent",
+                "dataloader.params.batch_size=4",
+                "experiment_name=training_transfuser_agent",
+                "train_test_split=navtrain",
+                "use_cache_without_dataset=True",
+                "force_cache_computation=False",
+                "cache_path=/data/hdd01/xingzb/navsim_exp/training_cache",
+                "worker=sequential"
+            ],
+            "env": {
+                "HYDRA_FULL_ERROR": "1",
+                "CUDA_VISIBLE_DEVICES": "6",
+                "NAVSIM_DEVKIT_ROOT": "/data/hdd01/xingzb/workspace/navsim-main"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: orgnize_data",
+            "type": "python",
+            "request": "launch",
+            "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
+            "program": "/data/hdd01/xingzb/workspace/navsim-main/tools/orgnize_data.py",
+            "env": {
+                "HYDRA_FULL_ERROR": "1",
+                "CUDA_VISIBLE_DEVICES": "6"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: read gz",
+            "type": "python",
+            "request": "launch",
+            "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
+            "program": "/data/hdd01/xingzb/workspace/navsim-main/tools/read_from_gz.py",
+            "env": {
+                "HYDRA_FULL_ERROR": "1",
+                "CUDA_VISIBLE_DEVICES": "6"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Debug Dataset Caching",
+            "type": "python",
+            "request": "launch",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_dataset_caching.py",
+            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "args": [
+                "agent=transfuser_agent",
+                "experiment_name=transfuser_cache_for_training_debug",
+                "cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/exp/debug",
+                "train_test_split=navtrain",
+                "worker=sequential",
+            ],
+            "env": {
+                "OPENBLAS_CORETYPE": "Haswell",
+                "HYDRA_FULL_ERROR": "1",
+                "NAVSIM_EXP_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/exp"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

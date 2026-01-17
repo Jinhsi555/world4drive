@@ -1,0 +1,4 @@
+_target_: navsim.planning.utils.multithreading.worker_ray_no_torch.RayDistributedNoTorch
+address: auto
+# num_cpus: 8
+# num_gpus: 1

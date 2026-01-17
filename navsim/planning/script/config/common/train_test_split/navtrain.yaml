@@ -1,0 +1,4 @@
+defaults:
+  - scene_filter: navtrain
+  - _self_  # 添加这一行，否则会报错
+data_split: trainval
