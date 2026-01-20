@@ -35,7 +35,7 @@ from navsim.planning.simulation.planner.pdm_planner.scoring.scene_aggregator imp
 from navsim.planning.simulation.planner.pdm_planner.simulation.pdm_simulator import PDMSimulator
 from navsim.planning.simulation.planner.pdm_planner.utils.pdm_enums import WeightedMetricIndex
 from navsim.planning.training.agent_lightning_module import AgentLightningModule
-from navsim.planning.training.dataset import Dataset
+from navsim.planning.training.dataset import Dataset, CacheOnlyDataset
 from navsim.traffic_agents_policies.abstract_traffic_agents_policy import AbstractTrafficAgentsPolicy
 
 logger = logging.getLogger(__name__)
@@ -251,14 +251,12 @@ def main(cfg: DictConfig) -> None:
         scene_filter=scene_filter,
         sensor_config=agent.get_sensor_config(),
     )
-    dataset = Dataset(
-        scene_loader=scene_loader_inference,
-        feature_builders=agent.get_feature_builders(),
-        target_builders=agent.get_target_builders(),
-        cache_path=None,
-        force_cache_computation=False,
-        is_training=False,
-    )
+    dataset = CacheOnlyDataset(
+            cache_path=cfg.cache_path,
+            feature_builders=agent.get_feature_builders(),
+            target_builders=agent.get_target_builders(),
+            log_names=cfg.test_logs,
+        )
     dataloader = DataLoader(dataset, **cfg.dataloader.params, shuffle=False)
     worker = build_worker(cfg)
 

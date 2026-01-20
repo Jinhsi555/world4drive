@@ -43,24 +43,42 @@ class W4DModel(nn.Module):
         super().__init__()
 
         self._config = config
-        #pretrained here
-        self.image_encoder = timm.create_model(
-                    config.image_architecture, pretrained=False, features_only=True
-                )
-        self.image_encoder.load_state_dict(torch.load(
-            '/vepfs-mlp2/c20250502/haoce/wlb/world4drive/ckpts/resnet34-333f7ec4.pth', 
-            map_location='cpu', 
-            weights_only=False
-            ),strict=False)
+        # pretrained here
+        # self.image_encoder = timm.create_model(
+        #             config.image_architecture, pretrained=False, features_only=True
+        #         )
+        # self.image_encoder.load_state_dict(torch.load(
+        #     '/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/resnet34-333f7ec4.pth', 
+        #     map_location='cpu', 
+        #     weights_only=False
+        #     ),strict=False)
+        
+        # vision learnable query
+        self.vision_query = nn.Parameter(
+            torch.randn(1, 3, 256, config.tf_d_model),
+            requires_grad=True,
+        )  # [1, 3, 256, 1024] 表示对应 3 个视角的可学习 vision query
+        
+        # define transformer decoder for vision query
+        self.vision_decoder_layer = nn.TransformerDecoderLayer(
+            d_model=config.tf_d_model,
+            nhead=config.tf_num_head,
+            dim_feedforward=config.tf_d_ffn,
+            dropout=config.tf_dropout,
+            batch_first=True,
+        )
+        
+        self.vision_decoder = nn.ModuleList(
+            nn.TransformerDecoder(self.vision_decoder_layer, num_layers=1) for _ in range(3)
+        )
 
-
-        self.image_fc = nn.Linear(512, 256)
+        # self.image_fc = nn.Linear(512, 256)
         self._status_encoding = nn.Linear(4 + 2 + 2, config.tf_d_model)
 
         self._num_poses = config.trajectory_sampling.num_poses
         #TODO: petr position_embedding
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 20*12 + 1
-        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 256+1
+        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 768+1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 256+1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 120+1
 
@@ -212,22 +230,37 @@ class W4DModel(nn.Module):
 
     def forward_test(self, features) -> Dict[str, torch.Tensor]:
         camera_feature = features['camera_feature']
+        b, n, seq_len, dim = camera_feature.shape  # [b, 3, 256, 1024]
+
         status_feature = features['status_feature']
 
         cmd = status_feature[..., :4]  # [bs, 4] one-hot
         cmd = torch.argmax(cmd, dim=-1)  # [bs] int
 
-        batch_size = status_feature.shape[0]
-        device = camera_feature.device
 
-        # =============================== img backbone =======================================
-        img_feat = self.image_encoder(camera_feature)[-1]   # [bs, 512, 8, 32]
-        img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)    # [bs, 8*32, 512]
-        img_feat = self.image_fc(img_feat.clone())  # -> [bs, 8*32, 256]
+        batch_size = status_feature.shape[0]
+        device= camera_feature.device
+
+        # img_feat = self.image_encoder(camera_feature)[-1]
+        # img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)
+        # img_feat = self.image_fc(img_feat.clone()) # 512 -> 256 # [bs, 8*32, 256]
+        
+        # # v1: concat 3 views in sequence length dimension  [bs, 3, 256, 1024] -> [bs, 768, 1024]
+        # img_feat = camera_feature[:, :, 1:, :].reshape(b, -1, dim)
+        
+        # v2: use learnable query do cross attention with each view dino feature
+        init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 256, 1024] -> [bs, 3, 256, 1024]
+        spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 256, 1024]
+        for i in range(3):
+            vision_query = init_view_query_feat[:, i]  # [bs, 256, 1024]
+            camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
+            spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
+            
+        spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
 
         # =============================== keyval trans =======================================
         status_encoding = self._status_encoding(status_feature)  # [bs, 256]
-        keyval = torch.cat([img_feat, status_encoding[:, None]], dim=1)  # [bs, 256+1, 256]
+        keyval = torch.cat([spatial_view_feat, status_encoding[:, None]], dim=1)  # [bs, 768+1, 256]
         keyval = keyval.clone() + self._keyval_embedding.weight[None, ...]
         keyval_final = keyval  # [bs, 256+1, 256]
 
@@ -293,6 +326,7 @@ class W4DModel(nn.Module):
 
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
         camera_feature = features['camera_feature']
+        b, n, seq_len, dim = camera_feature.shape
 
         status_feature = features['status_feature']
 
@@ -303,15 +337,26 @@ class W4DModel(nn.Module):
         batch_size = status_feature.shape[0]
         device= camera_feature.device
 
-        img_feat = self.image_encoder(camera_feature)[-1]
-        img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)
-        img_feat = self.image_fc(img_feat.clone()) # 512 -> 256 # [bs, 8*32, 256]
+        # img_feat = self.image_encoder(camera_feature)[-1]
+        # img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)
+        # img_feat = self.image_fc(img_feat.clone()) # 512 -> 256 # [bs, 8*32, 256]
+        
+        # # v1: concat 3 views in sequence length dimension  [bs, 3, 256, 1024] -> [bs, 768, 1024]
+        # img_feat = camera_feature[:, :, 1:, :].reshape(b, -1, dim)
+        
+        # v2: use learnable query do cross attention with each view dino feature
+        init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 256, 1024] -> [bs, 3, 256, 1024]
+        spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 256, 1024]
+        for i in range(3):
+            vision_query = init_view_query_feat[:, i]  # [bs, 256, 1024]
+            camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
+            spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
+            
+        spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
 
-
-        # =============================== keyval trans=======================================
-        status_encoding = self._status_encoding(status_feature)
-
-        keyval = torch.cat([img_feat, status_encoding[:, None]], dim=1)
+        # =============================== keyval trans =======================================
+        status_encoding = self._status_encoding(status_feature)  # [bs, 256]
+        keyval = torch.cat([spatial_view_feat, status_encoding[:, None]], dim=1)  # [bs, 768+1, 256]
         keyval = keyval.clone() + self._keyval_embedding.weight[None, ...]
 
         keyval_final = keyval   # [bs, 64, 257 , 256]

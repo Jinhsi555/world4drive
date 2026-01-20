@@ -10,11 +10,11 @@ export NCCL_P2P_DISABLE=0
 export NCCL_SHM_DISABLE=0
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export NCCL_TIMEOUT=36000
-
+export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHONPATH
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_3mode_navtrain_v15_ypx
+experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -25,16 +25,18 @@ torchrun \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
     --config-name ${config} \
     agent=transfuser_agent \
-    dataloader.params.batch_size=16 \
+    dataloader.params.batch_size=8 \
+    dataloader.params.num_workers=12 \
     experiment_name=$experiment_name \
     train_test_split=$TRAIN_TEST_SPLIT \
     use_cache_without_dataset=True \
     force_cache_computation=False \
-    cache_path=$NAVSIM_EXP_ROOT/training_cache \
+    cache_path=$NAVSIM_EXP_ROOT/dino_feature_cache \
     agent.config.model_version=15 \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
-    trainer.params.devices=8
+    trainer.params.devices=8 \
+    worker.threads_per_node=14
     # resume_ckpt_path="'/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_3mode_all_navtrain/2025.10.16.08.35.16/lightning_logs/version_0/checkpoints/epoch=29-step=12120.ckpt'"

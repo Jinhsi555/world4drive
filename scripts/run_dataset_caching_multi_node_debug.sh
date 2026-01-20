@@ -4,7 +4,7 @@ export NUPLAN_MAPS_ROOT="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/ma
 export NAVSIM_EXP_ROOT="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp"
 export NAVSIM_DEVKIT_ROOT="/vepfs-mlp2/c20250502/haoce/wlb/world4drive"
 export OPENSCENE_DATA_ROOT="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets"
-TRAIN_TEST_SPLIT=navtrain
+TRAIN_TEST_SPLIT=navtest
 
 export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHONPATH
 torchrun \
@@ -19,8 +19,7 @@ torchrun \
     agent.config.num_mode=4 \
     agent.config.use_cmd_embed=False \
     agent.config.cache_mode=True \
-    experiment_name=transfuser_cache_for_training \
-    cache_path=$NAVSIM_EXP_ROOT/dino_feature_cache \
+    experiment_name=transfuser_cache_for_training_debug \
+    cache_path=$NAVSIM_EXP_ROOT/all_info_training_cache_debug \
     train_test_split=$TRAIN_TEST_SPLIT \
-    worker.threads_per_node=14
     # worker=sequential \

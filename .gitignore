@@ -33,6 +33,6 @@ lightning_logs/*
 
 navsim.egg-info
 
-ckpts
+checkpoints
 
 datasets

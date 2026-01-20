@@ -66,9 +66,10 @@ class TransfuserConfig:
     use_semantic = False
     use_depth = False
     add_features = True
+    cache_mode: bool = False
 
     # Transformer
-    tf_d_model: int = 256
+    tf_d_model: int = 1024
     tf_d_ffn: int = 1024
     tf_num_layers: int = 3
     tf_num_head: int = 8

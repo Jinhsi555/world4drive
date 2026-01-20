@@ -34,22 +34,22 @@
             "args": [
                 "agent=transfuser_agent",
                 "dataloader.params.batch_size=32",
-                "dataloader.params.num_workers=8",
+                "dataloader.params.num_workers=12",
                 "experiment_name=training_debug",
                 "train_test_split=navtrain",
                 "use_cache_without_dataset=True",
                 "force_cache_computation=False",
-                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache",
-                "worker=sequential",
-                "agent.config.model_version=3",
-                "agent.config.num_mode=3",
+                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_feature_cache",
+                // "worker=sequential",
+                "agent.config.model_version=15",
+                "agent.config.num_mode=4",
                 "agent.config.use_cmd_embed=False",
                 // "agent.config.action_chunk_size=4",
                 // "agent.config._use_mlp_ensemble=True",
                 // "agent.config.model_name=LAW"  // LAW or W4D
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
                 "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
                 "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
                 "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
@@ -68,17 +68,19 @@
             "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
             "args": [
                 "agent=transfuser_agent",
-                "agent.config.model_version=3",
-                "agent.config.num_mode=3",
+                "agent.config.model_version=15",
+                "agent.config.num_mode=4",
                 "agent.config.traj_cmd_loss_weight=0",
-                "agent.checkpoint_path='/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_3mode_with_cmd_embed/2026.01.13.17.42.33/lightning_logs/version_0/checkpoints/epoch=74-step=24975.ckpt'",
+                "agent.config.use_cmd_embed=False",
+                "agent.checkpoint_path='/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_v15_dino/2026.01.19.20.22.30/lightning_logs/version_0/checkpoints/epoch99.ckpt'",
                 "experiment_name=pdms_w4d_32gpu_4bs_debug",
                 "train_test_split=navtest",
                 "metric_cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/metric_cache",
                 // "use_cache_without_dataset=True",
                 // "force_cache_computation=False",
-                // "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache",
-                // "worker=sequential",
+                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache_debug",
+                "worker=sequential",
+                "dataloader.params.num_workers=1"
                 
             ],
             "env": {
@@ -96,7 +98,7 @@
         },
         {
             "name": "Python: Train Transfuser grpo Agent",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_training.py",
@@ -126,7 +128,7 @@
         },
         {
             "name": "Debug Evaluation",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -155,7 +157,7 @@
         },
         {
             "name": "Debug navtest Evaluation",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -186,7 +188,7 @@
         },
         {
             "name": "Debug navtest one stage Evaluation",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -220,7 +222,7 @@
         },
         {
             "name": "Debug navtest one stage Evaluation epona",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -255,7 +257,7 @@
         },
         {
             "name": "Debug run_pdm_score_v1_voc_save_info",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -281,7 +283,7 @@
         },
         {
             "name": "Debug run_pdm_score_v2_voc_save_info",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -308,7 +310,7 @@
         },
         {
             "name": "Debug run_pdm_score_v2_voc_save_infov3",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -335,7 +337,7 @@
         },
         {
             "name": "Debug run_pdm_score_v2_voc_save_infov5",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
@@ -362,7 +364,7 @@
         },
         {
             "name": "Python: generate trajs",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
             "program": "/data/hdd01/xingzb/workspace/navsim-main/navsim/planning/script/run_generate_trajs.py",
@@ -386,7 +388,7 @@
         },
         {
             "name": "Python: orgnize_data",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
             "program": "/data/hdd01/xingzb/workspace/navsim-main/tools/orgnize_data.py",
@@ -399,7 +401,7 @@
         },
         {
             "name": "Python: read gz",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "python": "/data/hdd01/xingzb/miniconda3/envs/navsim/bin/python",
             "program": "/data/hdd01/xingzb/workspace/navsim-main/tools/read_from_gz.py",
@@ -412,22 +414,29 @@
         },
         {
             "name": "Python: Debug Dataset Caching",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
-            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
-            "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_dataset_caching.py",
-            "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
+            "python": "${command:python.interpreterPath}",
+            "program": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/navsim/planning/script/run_dataset_caching.py",
+            "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
             "args": [
                 "agent=transfuser_agent",
+                "agent.config.model_version=15",
+                "agent.config.num_mode=4",
+                "agent.config.use_cmd_embed=False",
                 "experiment_name=transfuser_cache_for_training_debug",
-                "cache_path=/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/exp/debug",
-                "train_test_split=navtrain",
+                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache_debug",
+                "train_test_split=navtest",
                 "worker=sequential",
             ],
             "env": {
-                "OPENBLAS_CORETYPE": "Haswell",
+                "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
+                "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
+                "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
+                "NAVSIM_DEVKIT_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
+                "OPENSCENE_DATA_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets",
                 "HYDRA_FULL_ERROR": "1",
-                "NAVSIM_EXP_ROOT": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/exp"
+                "PYTHONPATH": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror"
             },
             "console": "integratedTerminal",
             "justMyCode": false

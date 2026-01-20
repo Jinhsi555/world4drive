@@ -15,7 +15,7 @@ from navsim.agents.abstract_agent import AbstractAgent
 from navsim.common.dataclasses import SceneFilter
 from navsim.common.dataloader import SceneLoader
 from navsim.planning.training.agent_lightning_module import AgentLightningModule
-from navsim.planning.training.dataset import CacheOnlyDataset, Dataset
+from navsim.planning.training.dataset import CacheOnlyDataset, Dataset, CacheOnlyDatasetParallel
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +119,13 @@ def main(cfg: DictConfig) -> None:
         assert (
             cfg.cache_path is not None
         ), "cache_path must be provided when using cached data without building SceneLoader"
-        train_data = CacheOnlyDataset(
+        train_data = CacheOnlyDatasetParallel(
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
             log_names=cfg.train_logs,
         )
-        val_data = CacheOnlyDataset(
+        val_data = CacheOnlyDatasetParallel(
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),

@@ -4,6 +4,7 @@ import os
 import pickle
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from tqdm import tqdm
@@ -121,6 +122,120 @@ class CacheOnlyDataset(torch.utils.data.Dataset):
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
             data_dict = load_feature_target_from_pickle(data_dict_path)
+            for frame_name, frame_token in data_dict.items():
+                if 'camera_feature' in frame_name:
+                    dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
+                    frame_dict = load_feature_target_from_pickle(dino_feature_path)
+                    data_dict[frame_name] = frame_dict['dino_feature']
+            features.update(data_dict)
+
+        targets: Dict[str, torch.Tensor] = {}
+        for builder in self._target_builders:
+            data_dict_path = token_path / (builder.get_unique_name() + ".gz")
+            data_dict = load_feature_target_from_pickle(data_dict_path)
+            targets.update(data_dict)
+
+        ## 将token放入features中
+        features['token'] = token
+
+        return (features, targets)
+    
+class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
+    """Dataset wrapper for feature/target datasets from cache only."""
+
+    def __init__(
+        self,
+        cache_path: str,
+        feature_builders: List[AbstractFeatureBuilder],
+        target_builders: List[AbstractTargetBuilder],
+        log_names: Optional[List[str]] = None,
+    ):
+        """
+        Initializes the dataset module.
+        :param cache_path: directory to cache folder
+        :param feature_builders: list of feature builders
+        :param target_builders: list of target builders
+        :param log_names: optional list of log folder to consider, defaults to None
+        """
+        super().__init__()
+        assert Path(cache_path).is_dir(), f"Cache path {cache_path} does not exist!"
+        self._cache_path = Path(cache_path)
+
+        if log_names is not None:
+            self.log_names = [Path(log_name) for log_name in log_names if (self._cache_path / log_name).is_dir()]
+        else:
+            self.log_names = [log_name for log_name in self._cache_path.iterdir()]
+
+        self._feature_builders = feature_builders
+        self._target_builders = target_builders
+        self._valid_cache_paths: Dict[str, Path] = self._load_valid_caches(
+            cache_path=self._cache_path,
+            feature_builders=self._feature_builders,
+            target_builders=self._target_builders,
+            log_names=self.log_names,
+        )
+        self.tokens = list(self._valid_cache_paths.keys())
+
+    def __len__(self) -> int:
+        """
+        :return: number of samples to load
+        """
+        return len(self.tokens)
+
+    def __getitem__(self, idx: int) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+        """
+        Loads and returns pair of feature and target dict from data.
+        :param idx: index of sample to load.
+        :return: tuple of feature and target dictionary
+        """
+        return self._load_scene_with_token(self.tokens[idx])
+
+    @staticmethod
+    def _load_valid_caches(
+        cache_path: Path,
+        feature_builders: List[AbstractFeatureBuilder],
+        target_builders: List[AbstractTargetBuilder],
+        log_names: List[Path],
+        num_workers: int = 12,
+    ) -> Dict[str, Path]:
+        valid_cache_paths: Dict[str, Path] = {}
+        
+        def process_log(log_name: Path) -> list[tuple[str, Path]]:
+            log_path = cache_path / log_name
+            if not log_path.is_dir():
+                return []
+            return [(p.name, p) for p in log_path.iterdir() if p.is_dir()]
+        
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            results = list(tqdm(
+                executor.map(process_log, log_names),
+                total=len(log_names),
+                desc="Loading caches"
+            ))
+        
+        for batch in results:
+            valid_cache_paths.update(dict(batch))
+        
+        return valid_cache_paths
+
+    def _load_scene_with_token(self, token: str) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+        """
+        Helper method to load sample tensors given token
+        :param token: unique string identifier of sample
+        :return: tuple of feature and target dictionaries
+        """
+
+        token_path = self._valid_cache_paths[token]
+
+        features: Dict[str, torch.Tensor] = {}
+        for builder in self._feature_builders:
+            data_dict_path = token_path / (builder.get_unique_name() + ".gz")
+            data_dict = load_feature_target_from_pickle(data_dict_path)
+            for frame_name, frame_token in data_dict.items():
+                if 'camera_feature' in frame_name:
+                    dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
+                    frame_dict = load_feature_target_from_pickle(dino_feature_path)
+                    data_dict[frame_name] = frame_dict['dino_feature']
             features.update(data_dict)
 
         targets: Dict[str, torch.Tensor] = {}
@@ -199,11 +314,13 @@ class Dataset(torch.utils.data.Dataset):
 
         metadata = scene.scene_metadata
         token_path = self._cache_path / metadata.log_name / metadata.initial_token
+        feature_cache_path = self._cache_path / 'feature_cache'
         os.makedirs(token_path, exist_ok=True)
+        os.makedirs(feature_cache_path, exist_ok=True)
 
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = builder.compute_features(agent_input)
+            data_dict = builder.compute_features(agent_input, scene, feature_cache_path)
             dump_feature_target_to_pickle(data_dict_path, data_dict)
 
         for builder in self._target_builders:
@@ -290,133 +407,6 @@ class Dataset(torch.utils.data.Dataset):
             if self.is_training:
                 for builder in self._target_builders:
                     targets.update(builder.compute_targets(scene))
-
-        ## 将token放入features中
-        features['token'] = token
-
-        return (features, targets)
-
-# 创建一个新的数据集类，跳过初始化时的验证
-class OptimizedCacheOnlyDataset(torch.utils.data.Dataset):
-    """Dataset wrapper for feature/target datasets from cache only, with optimized initialization."""
-    
-    def __init__(
-        self,
-        cache_path: str,
-        feature_builders: List[AbstractFeatureBuilder],
-        target_builders: List[AbstractTargetBuilder],
-        log_names: Optional[List[str]] = None,
-        skip_validation: bool = False,
-    ):
-        """
-        Initializes the dataset module.
-        :param cache_path: directory to cache folder
-        :param feature_builders: list of feature builders
-        :param target_builders: list of target builders
-        :param log_names: optional list of log folder to consider, defaults to None
-        :param skip_validation: whether to skip the validation of cache files during initialization
-        """
-        super().__init__()
-        assert Path(cache_path).is_dir(), f"Cache path {cache_path} does not exist!"
-        self._cache_path = Path(cache_path)
-        
-        if log_names is not None:
-            self.log_names = [Path(log_name) for log_name in log_names if (self._cache_path / log_name).is_dir()]
-        else:
-            self.log_names = [log_name for log_name in self._cache_path.iterdir()]
-
-        self._feature_builders = feature_builders
-        self._target_builders = target_builders
-        
-        if skip_validation:
-            # 直接构建token列表，跳过验证过程
-            self.tokens = []
-            for log_name in self.log_names:
-                log_path = self._cache_path / log_name
-                for token_path in log_path.iterdir():
-                    if token_path.is_dir():
-                        self.tokens.append(token_path.name)
-            
-            # 构建一个简单的映射，不验证文件存在性
-            self._valid_cache_paths = {
-                token: self._cache_path / log_name / token 
-                for log_name in self.log_names 
-                for token in self.tokens
-            }
-        else:
-            # 原始的验证逻辑
-            self._valid_cache_paths: Dict[str, Path] = self._load_valid_caches(
-                cache_path=self._cache_path,
-                feature_builders=self._feature_builders,
-                target_builders=self._target_builders,
-                log_names=self.log_names,
-            )
-            self.tokens = list(self._valid_cache_paths.keys())
-
-    def __len__(self) -> int:
-        """
-        :return: number of samples to load
-        """
-        return len(self.tokens)
-
-    def __getitem__(self, idx: int) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
-        """
-        Loads and returns pair of feature and target dict from data.
-        :param idx: index of sample to load.
-        :return: tuple of feature and target dictionary
-        """
-        return self._load_scene_with_token(self.tokens[idx])
-
-    @staticmethod
-    def _load_valid_caches(
-        cache_path: Path,
-        feature_builders: List[AbstractFeatureBuilder],
-        target_builders: List[AbstractTargetBuilder],
-        log_names: List[Path],
-    ) -> Dict[str, Path]:
-        """
-        Helper method to load valid cache paths.
-        :param cache_path: directory of training cache folder
-        :param feature_builders: list of feature builders
-        :param target_builders: list of target builders
-        :param log_names: list of log paths to load
-        :return: dictionary of tokens and sample paths as keys / values
-        """
-
-        valid_cache_paths: Dict[str, Path] = {}
-
-        for log_name in tqdm(log_names, desc="Loading Valid Caches"):
-            log_path = cache_path / log_name
-            for token_path in log_path.iterdir():
-                found_caches: List[bool] = []
-                for builder in feature_builders + target_builders:
-                    data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-                    found_caches.append(data_dict_path.is_file())
-                if all(found_caches):
-                    valid_cache_paths[token_path.name] = token_path
-
-        return valid_cache_paths
-
-    def _load_scene_with_token(self, token: str) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
-        """
-        Helper method to load sample tensors given token
-        :param token: unique string identifier of sample
-        :return: tuple of feature and target dictionaries
-        """
-
-        token_path = self._valid_cache_paths[token]
-
-        features: Dict[str, torch.Tensor] = {}
-        for builder in self._feature_builders:
-            data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = load_feature_target_from_pickle(data_dict_path)
-            features.update(data_dict)
-
-        targets: Dict[str, torch.Tensor] = {}
-        for builder in self._target_builders:
-            data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = load_feature_target_from_pickle(data_dict_path)
-            targets.update(data_dict)
 
         ## 将token放入features中
         features['token'] = token

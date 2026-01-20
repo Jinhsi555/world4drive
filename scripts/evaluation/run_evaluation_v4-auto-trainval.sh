@@ -11,7 +11,7 @@ SYNTHETIC_SENSOR_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/sensor_blobs
 SYNTHETIC_SCENES_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/synthetic_scene_pickles
 split=navtest
 agent=transfuser_agent
-dir=training_w4d_agent_3mode_navtrain_v15_ypx/navtest_eval_one_stage
+dir=training_w4d_agent_3mode_navtrain_v15_ypx/navtest_eval_one_stage_roll1
 metric_cache_path="${NAVSIM_EXP_ROOT}/metric_cache"
 cd ${NAVSIM_DEVKIT_ROOT}
 ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_3mode_navtrain_v15_ypx/2026.01.17.06.20.10/lightning_logs/version_0/checkpoints

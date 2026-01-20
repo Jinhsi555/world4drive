@@ -55,6 +55,8 @@ config:
   vocab_trajs_dict_path: /mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/dataset/traj_pdm_v2/ori/navtrain_16384.pkl
   vocab_trajs_path: /mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/GTRS/traj_final/16384.npy
 
+  cache_mode: false
+
 lr: 1e-4
 checkpoint_path: null
 
