@@ -13,7 +13,7 @@ export NCCL_TIMEOUT=36000
 export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHONPATH
 
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_v15_dino
+experiment_name=training_w4d_agent_4mode_navtrain_v15_dino_vision_query
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \

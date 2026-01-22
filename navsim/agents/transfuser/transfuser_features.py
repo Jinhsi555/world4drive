@@ -50,9 +50,11 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         if self._config.cache_mode:
             self.dino_model = AutoModel.from_pretrained('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/dinov2-large').to(self.device)
             self.dino_processor = AutoImageProcessor.from_pretrained('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/dinov2-large')
+            self.dino_processor.crop_size = {'height': 224, 'width': 448}
 
             self.geometry_model = WorldMirror.from_pretrained("/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/HunyuanWorld-Mirror").to(self.device)
             self.geometry_processor = AutoImageProcessor.from_pretrained('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/dinov2-large')
+            self.geometry_processor.crop_size = {'height': 224, 'width': 448}
             self.geometry_processor.do_normalize = False
 
     def get_unique_name(self) -> str:
@@ -60,10 +62,31 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         return "transfuser_feature"
     
     def get_dino_feature(self, camera_inputs: List[np.ndarray]) -> torch.Tensor:
-        return self.dino_model(**self.dino_processor(images=camera_inputs, return_tensors="pt").to(self.device)).last_hidden_state
+        dino_inputs, _, _ = camera_inputs
+        return self.dino_model(**self.dino_processor(images=dino_inputs, return_tensors="pt").to(self.device)).last_hidden_state
     
     def get_geometry_feature(self, camera_inputs: List[np.ndarray]) -> torch.Tensor:
-        return self.geometry_model(**self.geometry_processor(images=camera_inputs, return_tensors="pt").to(self.device)).last_hidden_state
+        image_inputs, intrinsics, extrinsics = camera_inputs
+        
+        views = {}
+        imgs = self.geometry_processor(images=image_inputs, return_tensors="pt").to(self.device)['pixel_values']
+        views["img"] = imgs.unsqueeze(0)
+        views["camera_poses"] = extrinsics
+        views["camera_intrs"] = intrinsics
+
+        cond_flags = [1, 0, 1]  # [camera_pose, depth, intrinsics]
+
+        use_amp = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        if use_amp:
+            amp_dtype = torch.bfloat16
+        else:
+            amp_dtype = torch.float32
+        with torch.no_grad():
+            with torch.amp.autocast('cuda', enabled=bool(use_amp), dtype=amp_dtype):
+                priors = self.geometry_model.extract_priors(views)
+                geometry_features_list, patch_start_idx = self.geometry_model.visual_geometry_transformer(views["img"], priors, cond_flags=cond_flags)  # list: [4 * hidden_state], patch_start_idx = 7 (camera_token, register_token*4, pose_token, ray_token)
+        last_geometry_feature = geometry_features_list[-1]
+        return last_geometry_feature
 
     def compute_features(self, agent_input: AgentInput, scene: Scene, feature_cache_path: Path) -> Dict[str, torch.Tensor]:
         """Inherited, see superclass."""
@@ -87,7 +110,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         final_features["camera_feature_next_7"] = frame_tokens[10]
         final_features["camera_feature_next_8"] = frame_tokens[11]
         
-        camera_feature = self._get_camera_feature(agent_input)
+        camera_inputs = self._get_camera_feature(agent_input)
         
         final_features["status_feature"] = torch.concatenate(
             [
@@ -97,14 +120,26 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             ],
         )
         # features['camera'],features['intrinsics']=self._get_camera_intrinsics_feature(agent_input)
-        dino_camera_feature = self.dino_processor(images=camera_feature, return_tensors="pt").to(self.device)
-        features["camera_feature"] = self.get_dino_feature(camera_feature)
+        # dino_camera_feature = self.dino_processor(images=camera_feature, return_tensors="pt").to(self.device)
+        features["camera_feature"] = {
+            'dino_feature': self.get_dino_feature(camera_inputs),
+            'geometry_feature': self.get_geometry_feature(camera_inputs)
+        }
 
         ## 添加前几帧的信息
         camera_feature_prev_1, camera_feature_prev_2, camera_feature_prev_3 = self._get_camera_feature_prev(agent_input)
-        features["camera_feature_prev_1"] = self.get_dino_feature(camera_feature_prev_1)
-        features["camera_feature_prev_2"] = self.get_dino_feature(camera_feature_prev_2)
-        features["camera_feature_prev_3"] = self.get_dino_feature(camera_feature_prev_3)
+        features["camera_feature_prev_1"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_prev_1),
+            'geometry_feature': self.get_geometry_feature(camera_feature_prev_1)
+        }
+        features["camera_feature_prev_2"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_prev_2),
+            'geometry_feature': self.get_geometry_feature(camera_feature_prev_2)
+        }
+        features["camera_feature_prev_3"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_prev_3),
+            'geometry_feature': self.get_geometry_feature(camera_feature_prev_3)
+        }
         final_features['status_feature_prev_1'] = torch.concatenate(
             [
                 torch.tensor(agent_input.ego_statuses[2].driving_command, dtype=torch.float32),
@@ -129,14 +164,38 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
 
         # 添加后几帧的信息
         camera_feature_next_1, camera_feature_next_2, camera_feature_next_3, camera_feature_next_4, camera_feature_next_5, camera_feature_next_6, camera_feature_next_7, camera_feature_next_8 = self._get_camera_feature_next(agent_input)
-        features["camera_feature_next_1"] = self.get_dino_feature(camera_feature_next_1)
-        features["camera_feature_next_2"] = self.get_dino_feature(camera_feature_next_2)
-        features["camera_feature_next_3"] = self.get_dino_feature(camera_feature_next_3)
-        features["camera_feature_next_4"] = self.get_dino_feature(camera_feature_next_4)
-        features["camera_feature_next_5"] = self.get_dino_feature(camera_feature_next_5)
-        features["camera_feature_next_6"] = self.get_dino_feature(camera_feature_next_6)
-        features["camera_feature_next_7"] = self.get_dino_feature(camera_feature_next_7)
-        features["camera_feature_next_8"] = self.get_dino_feature(camera_feature_next_8)
+        features["camera_feature_next_1"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_1),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_1)
+        }
+        features["camera_feature_next_2"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_2),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_2)
+        }
+        features["camera_feature_next_3"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_3),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_3)
+        }
+        features["camera_feature_next_4"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_4),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_4)
+        }
+        features["camera_feature_next_5"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_5),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_5)
+        }
+        features["camera_feature_next_6"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_6),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_6)
+        }
+        features["camera_feature_next_7"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_7),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_7)
+        }
+        features["camera_feature_next_8"] = {
+            'dino_feature': self.get_dino_feature(camera_feature_next_8),
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_8)
+        }
         
         final_features['status_feature_next_1'] = torch.concatenate(
             [
@@ -193,7 +252,8 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
                 torch.tensor(agent_input.ego_statuses[11].ego_velocity, dtype=torch.float32),
                 torch.tensor(agent_input.ego_statuses[11].ego_acceleration, dtype=torch.float32),
             ],
-        )   
+        )
+
         # 添加历史轨迹信息
         ## 检查agent_input是否存在属性history_trajectory
         if 'history_trajectory' in dir(agent_input):
@@ -203,8 +263,8 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         for key, value in final_features.items():
             if 'camera_feature' in key:
                 save_dict[value] = {
-                    'dino_feature': features[key],
-                    'geometry_feature': self.get_geometry_feature(value)
+                    'dino_feature': features[key]['dino_feature'],
+                    'geometry_feature': features[key]['geometry_feature']
                 }
         
         for token_name, cache_feature in save_dict.items():
@@ -216,6 +276,77 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             
         return final_features
 
+    def adjust_camera_intrinsics(
+        self,
+        intrinsic_matrix: np.ndarray,
+        original_size: tuple,
+        resize_size: tuple,
+        crop_size: tuple
+    ) -> np.ndarray:
+        """
+        Adjust camera intrinsic matrix after resize and center crop operations.
+
+        Args:
+            intrinsic_matrix: Original 3x3 camera intrinsic matrix K
+                [[fx, 0,  cx],
+                [0,  fy, cy],
+                [0,  0,  1]]
+            original_size: Tuple of (width, height) of original image
+            resize_size: Tuple of (width, height) after resize
+            crop_size: Tuple of (width, height) after center crop
+
+        Returns:
+            Adjusted 3x3 camera intrinsic matrix K' for the preprocessed image
+
+        Example:
+            >>> K = np.array([[1000, 0, 500],
+            ...               [0, 1000, 400],
+            ...               [0, 0, 1]])
+            >>> K_new = adjust_camera_intrinsics(K, (640, 480), (256, 314), (224, 224))
+        """
+        # Input validation
+        assert intrinsic_matrix.shape == (3, 3), "Intrinsic matrix must be 3x3"
+        assert len(original_size) == 2, "Original size must be (width, height)"
+        assert len(resize_size) == 2, "Resize size must be (width, height)"
+        assert len(crop_size) == 2, "Crop size must be (width, height)"
+
+        orig_w, orig_h = original_size
+        resize_w, resize_h = resize_size
+        crop_w, crop_h = crop_size
+
+        # Step 1: Resize operation
+        # Scale factors
+        scale_x = resize_w / orig_w
+        scale_y = resize_h / orig_h
+
+        # Step 2: Center crop operation
+        # Calculate crop offsets (top-left corner of crop region)
+        crop_offset_x = (resize_w - crop_w) / 2
+        crop_offset_y = (resize_h - crop_h) / 2
+
+        # Extract original intrinsic parameters
+        fx = intrinsic_matrix[0, 0]
+        fy = intrinsic_matrix[1, 1]
+        cx = intrinsic_matrix[0, 2]
+        cy = intrinsic_matrix[1, 2]
+
+        # Adjust focal lengths (scale with resize)
+        fx_new = fx * scale_x
+        fy_new = fy * scale_y
+
+        # Adjust principal points (scale with resize, then offset by crop)
+        cx_new = cx * scale_x - crop_offset_x
+        cy_new = cy * scale_y - crop_offset_y
+
+        # Build new intrinsic matrix
+        K_new = np.array([
+            [fx_new, 0,       cx_new],
+            [0,       fy_new, cy_new],
+            [0,       0,      1      ]
+        ])
+
+        return K_new
+    
     def _get_camera_feature(self, agent_input: AgentInput) -> torch.Tensor:
         """
         Extract stitched camera from AgentInput
@@ -230,7 +361,38 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         f0 = cameras.cam_f0.image
         r0 = cameras.cam_r0.image
 
-        return np.stack([l0, f0, r0], axis=0)
+        image_list = []
+        intrinsics_list = []
+        extrinsics_list = []
+        for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+            camera = cameras.__getattribute__(camera_token)
+            
+            intrinsic = torch.tensor(
+                self.adjust_camera_intrinsics(
+                    intrinsic_matrix=camera.intrinsics,
+                    original_size=(1920, 1080),
+                    resize_size=(455, 256),
+                    crop_size=(448, 224),
+                ),
+                device=self.device,
+                dtype=torch.float32
+            )
+
+            c2w = np.eye(4)
+            c2w[:3, :3] = camera.sensor2lidar_rotation
+            c2w[:3, 3] = camera.sensor2lidar_translation
+            w2c = np.linalg.inv(c2w)
+            extrinsic = torch.tensor(w2c, device=self.device, dtype=torch.float32)
+
+            image_list.append(camera.image)
+            intrinsics_list.append(intrinsic)
+            extrinsics_list.append(extrinsic)
+
+        return (
+            np.stack(image_list, axis=0), 
+            torch.stack(intrinsics_list, dim=0).unsqueeze(0), 
+            torch.stack(extrinsics_list, dim=0).unsqueeze(0), 
+        )
     
     def _get_camera_feature_prev(self, agent_input: AgentInput) -> torch.Tensor:
         """
@@ -239,11 +401,39 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         :return: stitched front view image as torch tensor
         """
         
-        def proc(cam):
-            l0 = cam.cam_l0.image
-            f0 = cam.cam_f0.image
-            r0 = cam.cam_r0.image
-            return np.stack([l0, f0, r0], axis=0)
+        def proc(cameras):
+            image_list = []
+            intrinsics_list = []
+            extrinsics_list = []
+            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+                camera = cameras.__getattribute__(camera_token)
+                
+                intrinsic = torch.tensor(
+                    self.adjust_camera_intrinsics(
+                        intrinsic_matrix=camera.intrinsics,
+                        original_size=(1920, 1080),
+                        resize_size=(455, 256),
+                        crop_size=(448, 224),
+                    ),
+                    device=self.device,
+                    dtype=torch.float32
+                )
+
+                c2w = np.eye(4)
+                c2w[:3, :3] = camera.sensor2lidar_rotation
+                c2w[:3, 3] = camera.sensor2lidar_translation
+                w2c = np.linalg.inv(c2w)
+                extrinsic = torch.tensor(w2c, device=self.device, dtype=torch.float32)
+
+                image_list.append(camera.image)
+                intrinsics_list.append(intrinsic)
+                extrinsics_list.append(extrinsic)
+            
+            return (
+                np.stack(image_list, axis=0), 
+                torch.stack(intrinsics_list, dim=0).unsqueeze(0), 
+                torch.stack(extrinsics_list, dim=0).unsqueeze(0), 
+            )
 
         # 依次处理 3,2,1 帧
         return tuple(proc(agent_input.cameras[i]) for i in (2, 1, 0))
@@ -255,11 +445,39 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         :return: stitched front view image as torch tensor
         """
     
-        def proc(cam):
-            l0 = cam.cam_l0.image
-            f0 = cam.cam_f0.image
-            r0 = cam.cam_r0.image
-            return np.stack([l0, f0, r0], axis=0)
+        def proc(cameras):
+            image_list = []
+            intrinsics_list = []
+            extrinsics_list = []
+            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+                camera = cameras.__getattribute__(camera_token)
+                
+                intrinsic = torch.tensor(
+                    self.adjust_camera_intrinsics(
+                        intrinsic_matrix=camera.intrinsics,
+                        original_size=(1920, 1080),
+                        resize_size=(455, 256),
+                        crop_size=(448, 224),
+                    ),
+                    device=self.device,
+                    dtype=torch.float32
+                )
+
+                c2w = np.eye(4)
+                c2w[:3, :3] = camera.sensor2lidar_rotation
+                c2w[:3, 3] = camera.sensor2lidar_translation
+                w2c = np.linalg.inv(c2w)
+                extrinsic = torch.tensor(w2c, device=self.device, dtype=torch.float32)
+
+                image_list.append(camera.image)
+                intrinsics_list.append(intrinsic)
+                extrinsics_list.append(extrinsic)
+            
+            return (
+                np.stack(image_list, axis=0), 
+                torch.stack(intrinsics_list, dim=0).unsqueeze(0), 
+                torch.stack(extrinsics_list, dim=0).unsqueeze(0), 
+            )
 
         # 依次处理 +1, +2, +3, +4, +5, +6, +7, +8
         return tuple(proc(agent_input.cameras[i]) for i in (4, 5, 6, 7, 8, 9, 10, 11))
