@@ -20,6 +20,212 @@ from datetime import datetime
 import timm
 from torch.linalg import inv
 
+class RotaryPositionEmbedding(nn.Module):
+    def __init__(self, dim, base=10000):
+        """
+        dim = head_dim
+        """
+        super().__init__()
+        assert dim % 2 == 0, "RoPE head_dim must be an even number"
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seq_len, device, dtype):
+        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)  # (T, dim/2)
+        emb = torch.cat([freqs, freqs], dim=-1)            # (T, dim)
+        return emb.cos().to(dtype), emb.sin().to(dtype)
+
+def apply_rope(q, k, cos, sin):
+    """
+    RoPE:
+    q, k: (B, H, T, D)   # D must be an even number
+    cos/sin: (T, D)
+    """
+    cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, T, D)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+
+
+    def rotate_half(x):
+        # Swap even and odd dimensions and flip the signs
+        x1 = x[..., ::2]   # Even subdimension
+        x2 = x[..., 1::2]  # odd subdimension
+
+        return torch.stack((-x2, x1), dim=-1).reshape_as(x)
+
+
+    q_rot = (q * cos) + (rotate_half(q) * sin)
+    k_rot = (k * cos) + (rotate_half(k) * sin)
+
+    return q_rot, k_rot
+
+class BridgeAttentionTransformer(nn.Module):
+    """One MLP ResNet block with separate projections for self, adapter, task + RoPE, now with FiLM modulation."""
+
+    def __init__(self, config: TransfuserConfig):
+        super().__init__()
+        self.dim = config.tf_d_model
+        self.num_heads = config.tf_num_head
+        self.head_dim = self.dim // self.num_heads
+
+        self.ffn = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.ReLU(),
+            )
+
+        # Q (from x only)
+        self.q_proj = nn.Linear(self.dim, self.dim)
+
+        # Self-Attention: K, V
+        self.k_self = nn.Linear(self.dim, self.dim)
+        self.v_self = nn.Linear(self.dim, self.dim)
+
+        # Adapter cross-attention: K, V
+        self.k_adapter = nn.Linear(self.dim, self.dim)
+        self.v_adapter = nn.Linear(self.dim, self.dim)
+
+        # Task cross-attention: K, V
+        self.k_task = nn.Linear(self.dim, self.dim)
+        self.v_task = nn.Linear(self.dim, self.dim)
+
+        self.o_proj = nn.Linear(self.dim, self.dim)
+
+        # gating
+        self.gating_factor = nn.Parameter(torch.zeros(1))
+
+        # RoPE
+        self.rope = RotaryPositionEmbedding(self.head_dim)
+
+        # ---- FiLM ----
+        # FiLM is useless; to avoid conflict with chkpt, it can be kept as is for now.
+        self.film_gen = nn.Sequential(
+            nn.Linear(self.dim, self.dim * 2),  # output γ and β
+        )
+
+
+    def apply_film(self, x, gamma, beta):
+        """FiLM: per-channel modulation"""
+        return gamma.unsqueeze(1) * x + beta.unsqueeze(1)
+
+
+    def forward(self, x, h_a=None, h_t=None, p=None):
+        """
+        h_a: adapter tokens
+        h_t: task tokens
+        p:   possible conditioning vector (for FiLM)
+        """
+        g = self.gating_factor
+        ratio_g = torch.tanh(g)
+
+        # # concat h_a and p
+        # h_adapter = torch.cat((h_a, p),dim=1)
+
+        h_task = h_t
+        B, T, C = x.shape
+        K_a = h_a.size(1) if h_a is not None else 0
+        K_t = h_task.size(1) if h_task is not None else 0
+
+        # Q
+        q_1 = self.q_proj(x)
+
+        # self tokens
+        k_tokens = self.k_self(x)
+        v_tokens = self.v_self(x)
+
+        # adapter tokens
+        k_adapter = self.k_adapter(h_a)
+        v_adapter = self.v_adapter(h_a)
+
+        # task tokens
+        k_task = self.k_task(h_task)
+        v_task = self.v_task(h_task)
+
+
+        # reshape -> multi-head
+        def reshape_heads(t, B, L):
+            return t.view(B, L, self.num_heads, self.head_dim).transpose(1, 2)
+
+
+        q_1 = reshape_heads(q_1, B, T)
+        k_tokens, v_tokens = reshape_heads(k_tokens, B, T), reshape_heads(v_tokens, B, T)
+        k_adapter, v_adapter = reshape_heads(k_adapter, B, K_a), reshape_heads(v_adapter, B, K_a)
+        k_task, v_task = reshape_heads(k_task, B, K_t), reshape_heads(v_task, B, K_t)
+
+        # RoPE
+        cos_main, sin_main = self.rope(seq_len=T, device=x.device, dtype=x.dtype)
+        q_1, k_tokens = apply_rope(q_1, k_tokens, cos_main, sin_main)
+        cos_a, sin_a = self.rope(seq_len=K_a, device=x.device, dtype=x.dtype)
+        _, k_adapter = apply_rope(k_adapter, k_adapter, cos_a, sin_a)     
+        cos_t, sin_t = self.rope(seq_len=K_t, device=x.device, dtype=x.dtype)
+        _, k_task = apply_rope(k_task, k_task, cos_t, sin_t)
+
+        # attention scores
+        attn_scores = [torch.matmul(q_1, k_tokens.transpose(-2, -1))]
+        attn_scores.append(torch.matmul(q_1, k_adapter.transpose(-2, -1)))
+        attn_scores.append(torch.matmul(q_1, k_task.transpose(-2, -1)) * ratio_g)
+        attn_scores = torch.cat(attn_scores, dim=-1) / math.sqrt(self.head_dim)
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+
+        # combine V
+        v_list = [v_tokens,v_adapter,v_task]
+        v_combined = torch.cat(v_list, dim=2)
+
+        output = torch.matmul(attn_weights, v_combined)
+        output = output.transpose(1, 2).contiguous().view(B, T, C)
+        output = self.o_proj(output)
+
+        # # ---- FiLM ---- 
+        # gamma_beta = self.film_gen(p)  # [B, 2C]
+        # gamma, beta = gamma_beta.chunk(2, dim=-1)  # [B, C], [B, C]
+        # output = self.apply_film(output, gamma, beta)
+
+        # residual + FFN
+        x = self.ffn(output + x)
+        return x
+
+class _BridgeAttentionTransformer(nn.Module):
+    def __init__(self, config: TransfuserConfig):
+        super().__init__()
+
+        self.future_transformer = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(
+                d_model=config.tf_d_model // 2,
+                nhead=config.tf_num_head,
+                dim_feedforward=config.tf_d_ffn,
+                dropout=config.tf_dropout,
+                batch_first=True,
+            ),
+            num_layers=1,
+        )
+        self.future_projector = nn.Linear(config.tf_d_model, config.tf_d_model // 2)
+
+        self.geometry_transformer = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(
+                d_model=config.tf_d_model // 2,
+                nhead=config.tf_num_head,
+                dim_feedforward=config.tf_d_ffn,
+                dropout=config.tf_dropout,
+                batch_first=True,
+            ),
+            num_layers=1,
+        )
+        self.geometry_projector = nn.Linear(config.tf_d_model, config.tf_d_model // 2)
+
+        self.traj_query_projector = nn.Linear(config.tf_d_model, config.tf_d_model // 2)
+
+        # self.gating_factor = nn.Parameter(torch.randn(1))
+
+    def forward(self, future_feat, geometry_feat, traj_query):
+        # gating_factor = torch.tanh(self.gating_factor)
+        future_feat = self.future_projector(future_feat)
+        geometry_feat = self.geometry_projector(geometry_feat)
+        traj_query = self.traj_query_projector(traj_query)
+
+        future_feat_out = self.future_transformer(traj_query, future_feat)
+        geometry_feat_out = self.geometry_transformer(traj_query, geometry_feat)
+        refine_traj_feat = torch.cat([future_feat_out, geometry_feat_out], dim=-1)
+        return refine_traj_feat
 
 class ResNet34Backbone(nn.Module):
     def __init__(self, pretrained=False):
@@ -61,16 +267,14 @@ class W4DModel(nn.Module):
         )  # [1, 3, 512, 1024] 表示对应 3 个视角的可学习 vision query
         
         # define transformer decoder for vision query
-        self.vision_decoder_layer = nn.TransformerDecoderLayer(
-            d_model=config.tf_d_model,
-            nhead=config.tf_num_head,
-            dim_feedforward=config.tf_d_ffn,
-            dropout=config.tf_dropout,
-            batch_first=True,
-        )
-        
         self.vision_decoder = nn.ModuleList(
-            nn.TransformerDecoder(self.vision_decoder_layer, num_layers=1) for _ in range(3)
+            nn.TransformerDecoderLayer(
+                d_model=config.tf_d_model,
+                nhead=config.tf_num_head,
+                dim_feedforward=config.tf_d_ffn,
+                dropout=config.tf_dropout,
+                batch_first=True,
+            ) for _ in range(3)
         )
         
         # geometry learnable query
@@ -79,16 +283,24 @@ class W4DModel(nn.Module):
             requires_grad=True,
         )
         
-        self.geometry_decoder = nn.TransformerDecoder(
+        self.geometry_decoder = nn.ModuleList([
             nn.TransformerDecoderLayer(
                 d_model=config.tf_d_model,
                 nhead=config.tf_num_head,
                 dim_feedforward=config.tf_d_ffn,
                 dropout=config.tf_dropout,
                 batch_first=True,
-            ),
-            num_layers=1
+            ) for _ in range(3)
+        ])
+
+        self.geometry_projector = nn.Sequential(
+            nn.Linear(config.tf_d_model, 2*config.tf_d_model),
+            nn.ReLU(),
+            nn.Linear(2*config.tf_d_model, 2*config.tf_d_model),
         )
+
+        # refine net
+        self.refine_traj_decoder = BridgeAttentionTransformer(config)
 
         # self.image_fc = nn.Linear(512, 256)
         self._status_encoding = nn.Linear(4 + 2 + 2, config.tf_d_model)
@@ -212,14 +424,11 @@ class W4DModel(nn.Module):
         # ---------------------------------------------------------------------------------------
 
                
-        # add world model here
-        self.use_wm = False
-        self.use_wm_training = False
-
+        # world model
         self.stride=32
         self.use_all_mb = config.use_all_mb if hasattr(config, 'use_all_mb') else False
 
-        if self.use_wm:
+        if self._config.use_wm:
             num_wm_query = num_keyval
             self._wm_query_embedding = nn.Embedding(num_wm_query, config.tf_d_model)
             wm_decoder_layer = nn.TransformerDecoderLayer(
@@ -230,6 +439,7 @@ class W4DModel(nn.Module):
                 batch_first=True,
             )
             self._wm_decoder = nn.TransformerDecoder(wm_decoder_layer, config.tf_num_layers) # input: Bz, num_token, d_model
+            
     def gen_sineembed_for_position(self, pos_tensor, hidden_dim=256):
         """Mostly copy-paste from https://github.com/IDEA-opensource/DAB-DETR/
         """
@@ -247,8 +457,8 @@ class W4DModel(nn.Module):
         return pos
 
     def forward_test(self, features) -> Dict[str, torch.Tensor]:
-        camera_feature = features['camera_feature']
-        b, n, seq_len, dim = camera_feature.shape  # [b, 3, 256, 1024]
+        dino_feature, geometry_feature = features['camera_feature']
+        b, n, seq_len, dim = dino_feature.shape  # [b, 3, 256, 1024]
 
         status_feature = features['status_feature']
 
@@ -257,7 +467,7 @@ class W4DModel(nn.Module):
 
 
         batch_size = status_feature.shape[0]
-        device= camera_feature.device
+        device= dino_feature.device
 
         # img_feat = self.image_encoder(camera_feature)[-1]
         # img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)
@@ -271,10 +481,21 @@ class W4DModel(nn.Module):
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 512, 1024]
         for i in range(3):
             vision_query = init_view_query_feat[:, i]  # [bs, 512, 1024]
-            camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
+            camera_kv = dino_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
             
         spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 1536, 1024]
+
+        # geometry query to interact with dino feature of each view
+        init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 519, 1024] -> [bs, 3, 519, 1024]
+        geometry_feat = torch.zeros_like(init_geometry_query)
+        for i in range(3):
+            geometry_query = init_geometry_query[:, i]  # [bs, 519, 1024]
+            camera_kv = dino_feature[:, i]  # [bs, 519, 1024]
+            geometry_feat[:, i] = self.geometry_decoder[i](geometry_query, camera_kv)
+        
+        geometry_feat = geometry_feat.reshape(b, -1, dim)  # [b, 3*519, 1024]
+        geometry_feat = self.geometry_projector(geometry_feat)  # [b, 3*519, 1024] -> [b, 3*519, 2048]
 
         # =============================== keyval trans =======================================
         status_encoding = self._status_encoding(status_feature)  # [bs, 1024]
@@ -343,8 +564,9 @@ class W4DModel(nn.Module):
         return trajectory
 
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
-        camera_feature = features['camera_feature']
-        b, n, seq_len, dim = camera_feature.shape
+        # unpack the camera_feature to get dino feature and geometry feature
+        dino_feature, geometry_feature = features['camera_feature']
+        b, n, seq_len, dim = dino_feature.shape
 
         status_feature = features['status_feature']
 
@@ -353,7 +575,7 @@ class W4DModel(nn.Module):
 
 
         batch_size = status_feature.shape[0]
-        device= camera_feature.device
+        device= dino_feature.device
 
         # img_feat = self.image_encoder(camera_feature)[-1]
         # img_feat = img_feat.flatten(-2, -1).permute(0, 2, 1)
@@ -367,10 +589,20 @@ class W4DModel(nn.Module):
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 512, 1024]
         for i in range(3):
             vision_query = init_view_query_feat[:, i]  # [bs, 512, 1024]
-            camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
+            camera_kv = dino_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
             
         spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 1536, 1024]
+
+        # geometry query to interact with dino feature of each view
+        init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 519, 1024] -> [bs, 3, 519, 1024]
+        geometry_feat = torch.zeros_like(init_geometry_query)
+        for i in range(3):
+            geometry_query = init_geometry_query[:, i]  # [bs, 519, 1024]
+            camera_kv = dino_feature[:, i]  # [bs, 519, 1024]
+            geometry_feat[:, i] = self.geometry_decoder[i](geometry_query, camera_kv)
+        
+        geometry_feat = self.geometry_projector(geometry_feat)  # [b, 3, 519, 1024] -> [b, 3, 519, 2048]
 
         # =============================== keyval trans =======================================
         status_encoding = self._status_encoding(status_feature)  # [bs, 1024]
@@ -441,6 +673,10 @@ class W4DModel(nn.Module):
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
         trajectory['cmd_gt'] = cmd
+
+        # record the geometry feature and gt
+        trajectory['geometry_predict'] = geometry_feat
+        trajectory['geometry_gt'] = geometry_feature[:, 0, ...]
        
 
         # # 如果rl，则输出方差
@@ -449,13 +685,20 @@ class W4DModel(nn.Module):
         #     trajectory['trajectory_var'] = traj_var
         #     trajectory['keyval_final'] = keyval_final
 
-        if self.use_wm:
+        if self._config.use_wm:
             wm_keyval = keyval_final
             wm_target = keyval_final
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
             wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
             trajectory['wm_next_latent']=wm_next_latent
             trajectory['cur_latent']=wm_target
+
+            # refine the trajectory
+            geometry_feat_for_refine = geometry_feat[:, :, 7:, 1024:].reshape(b, -1, dim)
+            refine_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            refine_traj = self._trajectory_head(refine_traj_feat, cmd=cmd)
+            trajectory.update(refine_traj)
+
             return trajectory
         else:
             return trajectory
@@ -565,8 +808,8 @@ class W4DModel(nn.Module):
                 loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
 
         # 世界模型损失
-        if self.use_wm_training and 'wm_next_latent' in predictions:
-            wm_loss_a = torch.nn.functional.mse_loss(predictions["wm_next_latent"], predictions["cur_latent"].detach())
+        if self._config.use_wm_training and 'wm_next_latent' in predictions:
+            wm_loss_a = torch.nn.functional.mse_loss(predictions["wm_next_latent"], predictions["next_latent"].detach())
             loss_dict["wm_loss"] = wm_loss_a * self.wm_loss_weight
 
         return loss_dict

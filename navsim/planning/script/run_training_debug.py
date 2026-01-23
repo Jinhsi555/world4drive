@@ -113,13 +113,13 @@ def main(cfg: DictConfig) -> None:
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.train_logs,
+            log_names=cfg.test_logs,
         )
         val_data = CacheOnlyDatasetParallel(
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.val_logs,
+            log_names=cfg.test_logs,
         )
     else:
         logger.info("Building SceneLoader")

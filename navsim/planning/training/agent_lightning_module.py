@@ -43,7 +43,10 @@ class AgentLightningModule(pl.LightningModule):
             prediction = self.agent.forward_train(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
         elif logging_prefix=='train' and self._cfg.use_wm:
-            # 间隔2 frame
+            # current t
+            prediction = self.agent.forward_train(features)
+            
+            # prev t-1
             prev_features = {}
             prev_features['camera_feature'] = features['camera_feature_prev_3']
             prev_features['status_feature'] = features['status_feature_prev_3']
@@ -51,15 +54,22 @@ class AgentLightningModule(pl.LightningModule):
             prev_targets = {}
             prev_targets['trajectory'] = targets['trajectory_prev_3']
 
-            self.agent._transfuser_model.prev_keyval_feat = None
+            # self.agent._transfuser_model.prev_keyval_feat = None
             prev_prediction = self.agent.forward_train(prev_features)
-
-            prediction = self.agent.forward_train(features)
-
+            
             prev_prediction['next_latent'] = prediction['cur_latent']
+            
+            # next t+8
+            next_features = {}
+            next_features['camera_feature'] = features['camera_feature_next_8']
+            next_features['status_feature'] = features['status_feature_next_8']
+            
+            next_prediction = self.agent.forward_train(next_features)
 
-            prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)
+            prediction['next_latent'] = next_prediction['cur_latent']
 
+            # compute loss
+            prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)            
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
             
             # 为prev_loss中的损失项添加前缀prev_

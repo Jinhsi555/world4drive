@@ -235,7 +235,7 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
                 if 'camera_feature' in frame_name:
                     dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
                     frame_dict = load_feature_target_from_pickle(dino_feature_path)
-                    data_dict[frame_name] = frame_dict['dino_feature']
+                    data_dict[frame_name] = (frame_dict['dino_feature'], frame_dict['geometry_feature'])
             features.update(data_dict)
 
         targets: Dict[str, torch.Tensor] = {}
@@ -272,6 +272,10 @@ class Dataset(torch.utils.data.Dataset):
             self._cache_path, feature_builders, target_builders
         )
 
+        self.fix_file: bool = True
+        if self.fix_file:
+            import json
+            self.broken_file_list = json.load(open('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_test_corrupted_files.json', 'r'))
         if self._cache_path is not None:
             self.cache_dataset()
 
@@ -311,6 +315,16 @@ class Dataset(torch.utils.data.Dataset):
 
         scene = self._scene_loader.get_scene_from_token(token)
         agent_input = scene.get_agent_input()
+
+        # fix the broken cache file
+        if self.fix_file:
+            frame_tokens = [frame.token for frame in scene.frames[:-2]]
+            # 检查是否有需要修复的文件
+            need_fix = any(frame_token in self.broken_file_list for frame_token in frame_tokens)
+            if not need_fix:
+                return
+            else:
+                print(f"Fixing cache file for {token}")
 
         metadata = scene.scene_metadata
         token_path = self._cache_path / metadata.log_name / metadata.initial_token
