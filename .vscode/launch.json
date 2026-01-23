@@ -33,8 +33,8 @@
             "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
             "args": [
                 "agent=transfuser_agent",
-                "dataloader.params.batch_size=4",
-                "dataloader.params.num_workers=32",
+                "dataloader.params.batch_size=8",
+                "dataloader.params.num_workers=12",
                 "dataloader.params.prefetch_factor=null",
                 "experiment_name=training_debug",
                 "train_test_split=navtest",

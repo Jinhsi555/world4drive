@@ -89,10 +89,18 @@ class AgentLightningModule(pl.LightningModule):
             prev_features['camera_feature'] = features['camera_feature_prev_3']
             prev_features['status_feature'] = features['status_feature_prev_3']
 
-            self.agent._transfuser_model.prev_keyval_feat = None
             prev_prediction = self.agent.forward_test(prev_features)
 
             prediction = self.agent.forward_test(features)
+
+            # next t+8
+            next_features = {}
+            next_features['camera_feature'] = features['camera_feature_next_8']
+            next_features['status_feature'] = features['status_feature_next_8']
+            
+            next_prediction = self.agent.forward_train(next_features)
+
+            prediction['next_latent'] = next_prediction['cur_latent']
 
             # prediction = self.agent.forward_test(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)

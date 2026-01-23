@@ -20,7 +20,7 @@ torchrun \
     agent.config.use_cmd_embed=False \
     agent.config.cache_mode=True \
     experiment_name=transfuser_cache_for_training_debug \
-    cache_path=$NAVSIM_EXP_ROOT/dino_geometry_cache_test \
+    cache_path=$NAVSIM_EXP_ROOT/all_info_training_cache_debug_test \
     train_test_split=$TRAIN_TEST_SPLIT \
     worker.threads_per_node=14
     # worker=sequential \

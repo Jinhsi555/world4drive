@@ -8,7 +8,11 @@ TRAIN_TEST_SPLIT=navtrain
 
 export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHONPATH
 torchrun \
+    --nnodes=$MLP_WORKER_NUM \
     --nproc_per_node=8 \
+    --node_rank=$MLP_ROLE_INDEX \
+    --master_addr=$MLP_WORKER_0_HOST \
+    --master_port=$MLP_WORKER_0_PORT \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_dataset_caching_multi_node.py \
     agent=transfuser_agent \
     agent.config.model_version=15 \
@@ -20,7 +24,3 @@ torchrun \
     train_test_split=$TRAIN_TEST_SPLIT \
     worker.threads_per_node=14
     # worker=sequential \
-
-    #     --node_rank=$MLP_ROLE_INDEX \
-    # --master_addr=$MLP_WORKER_0_HOST \
-    # --master_port=$MLP_WORKER_0_PORT \    --nnodes=$MLP_WORKER_NUM \

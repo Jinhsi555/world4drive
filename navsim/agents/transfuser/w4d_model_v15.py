@@ -299,6 +299,8 @@ class W4DModel(nn.Module):
             nn.Linear(2*config.tf_d_model, 2*config.tf_d_model),
         )
 
+        self.geometry_loss_weight = 0.2
+
         # refine net
         self.refine_traj_decoder = BridgeAttentionTransformer(config)
 
@@ -494,7 +496,6 @@ class W4DModel(nn.Module):
             camera_kv = dino_feature[:, i]  # [bs, 519, 1024]
             geometry_feat[:, i] = self.geometry_decoder[i](geometry_query, camera_kv)
         
-        geometry_feat = geometry_feat.reshape(b, -1, dim)  # [b, 3*519, 1024]
         geometry_feat = self.geometry_projector(geometry_feat)  # [b, 3*519, 1024] -> [b, 3*519, 2048]
 
         # =============================== keyval trans =======================================
@@ -555,13 +556,31 @@ class W4DModel(nn.Module):
         # =============================== 轨迹输出 ===========================================
         trajectory = self._trajectory_head(ego_query_out, cmd=cmd)
       
-
-
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
         trajectory['cmd_gt'] = cmd
-        
-        return trajectory
+
+        # record the geometry feature and gt
+        trajectory['geometry_predict'] = geometry_feat
+        trajectory['geometry_gt'] = geometry_feature[:, 0, ...]
+
+        if self._config.use_wm:
+            wm_keyval = keyval_final
+            wm_target = keyval_final
+            wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
+            wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
+            trajectory['wm_next_latent']=wm_next_latent
+            trajectory['cur_latent']=wm_target
+
+            # refine the trajectory
+            geometry_feat_for_refine = geometry_feat[:, :, 7:, 1024:].reshape(b, -1, dim)
+            refine_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            refine_traj = self._trajectory_head(refine_traj_feat, cmd=cmd)
+            trajectory.update(refine_traj)
+
+            return trajectory
+        else:
+            return trajectory
 
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
         # unpack the camera_feature to get dino feature and geometry feature
@@ -811,6 +830,10 @@ class W4DModel(nn.Module):
         if self._config.use_wm_training and 'wm_next_latent' in predictions:
             wm_loss_a = torch.nn.functional.mse_loss(predictions["wm_next_latent"], predictions["next_latent"].detach())
             loss_dict["wm_loss"] = wm_loss_a * self.wm_loss_weight
+
+        # geometry feature loss
+        geometry_loss = torch.nn.functional.l1_loss(predictions["geometry_predict"], predictions["geometry_gt"])
+        loss_dict["geometry_loss"] = geometry_loss * self.geometry_loss_weight
 
         return loss_dict
 
