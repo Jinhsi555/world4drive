@@ -7,20 +7,20 @@ export OPENSCENE_DATA_ROOT="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets
 TRAIN_TEST_SPLIT=navtest
 
 export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHONPATH
-    # --node_rank=$MLP_ROLE_INDEX \
-    # --master_addr=$MLP_WORKER_0_HOST \
-    # --master_port=$MLP_WORKER_0_PORT \
-    # --nnodes=$MLP_WORKER_NUM \
 torchrun \
+    --nnodes=$MLP_WORKER_NUM \
     --nproc_per_node=8 \
+    --node_rank=$MLP_ROLE_INDEX \
+    --master_addr=$MLP_WORKER_0_HOST \
+    --master_port=$MLP_WORKER_0_PORT \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_dataset_caching_multi_node.py \
     agent=transfuser_agent \
     agent.config.model_version=15 \
     agent.config.num_mode=4 \
     agent.config.use_cmd_embed=False \
     agent.config.cache_mode=True \
-    experiment_name=transfuser_cache_for_training_debug \
-    cache_path=$NAVSIM_EXP_ROOT/all_info_training_cache_debug_test/single_view \
+    experiment_name=transfuser_cache_for_training \
+    cache_path=$NAVSIM_EXP_ROOT/dino_geometry_cache_test_single_view_float32 \
     train_test_split=$TRAIN_TEST_SPLIT \
     worker.threads_per_node=14
     # worker=sequential \

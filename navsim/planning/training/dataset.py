@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from tqdm import tqdm
+import time
 
 from navsim.common.dataloader import SceneLoader
 from navsim.planning.training.abstract_feature_target_builder import AbstractFeatureBuilder, AbstractTargetBuilder
@@ -28,6 +29,14 @@ def dump_feature_target_to_pickle(path: Path, data_dict: Dict[str, torch.Tensor]
     with gzip.open(path, "wb", compresslevel=1) as f:
         pickle.dump(data_dict, f)
 
+def timed(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f"{func.__qualname__} took {end - start:.4f} seconds to execute\n")
+        return result
+    return wrapper
 
 class CacheOnlyDataset(torch.utils.data.Dataset):
     """Dataset wrapper for feature/target datasets from cache only."""
@@ -182,6 +191,7 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
         """
         return len(self.tokens)
 
+    @timed
     def __getitem__(self, idx: int) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Loads and returns pair of feature and target dict from data.
@@ -272,10 +282,10 @@ class Dataset(torch.utils.data.Dataset):
             self._cache_path, feature_builders, target_builders
         )
 
-        self.fix_file: bool = True
+        self.fix_file: bool = False
         if self.fix_file:
             import json
-            self.broken_file_list = json.load(open('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_test_corrupted_files.json', 'r'))
+            self.broken_file_list = json.load(open('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_test_single_view_corrupted_files.json', 'r'))
         if self._cache_path is not None:
             self.cache_dataset()
 

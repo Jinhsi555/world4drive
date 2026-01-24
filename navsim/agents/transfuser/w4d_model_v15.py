@@ -20,6 +20,15 @@ from datetime import datetime
 import timm
 from torch.linalg import inv
 
+def timed(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f"{func.__qualname__} took {end - start:.4f} seconds to execute\n")
+        return result
+    return wrapper
+
 class RotaryPositionEmbedding(nn.Module):
     def __init__(self, dim, base=10000):
         """
@@ -108,7 +117,7 @@ class BridgeAttentionTransformer(nn.Module):
         """FiLM: per-channel modulation"""
         return gamma.unsqueeze(1) * x + beta.unsqueeze(1)
 
-
+    # @timed
     def forward(self, x, h_a=None, h_t=None, p=None):
         """
         h_a: adapter tokens
@@ -262,9 +271,9 @@ class W4DModel(nn.Module):
         
         # vision learnable query
         self.vision_query = nn.Parameter(
-            torch.randn(1, 3, 512, config.tf_d_model),
+            torch.randn(1, config.num_view, 512, config.tf_d_model),
             requires_grad=True,
-        )  # [1, 3, 512, 1024] 表示对应 3 个视角的可学习 vision query
+        )  # [1, c, 512, 1024] 表示对应 c 个视角的可学习 vision query
         
         # define transformer decoder for vision query
         self.vision_decoder = nn.ModuleList(
@@ -274,12 +283,12 @@ class W4DModel(nn.Module):
                 dim_feedforward=config.tf_d_ffn,
                 dropout=config.tf_dropout,
                 batch_first=True,
-            ) for _ in range(3)
+            ) for _ in range(config.num_view)
         )
         
         # geometry learnable query
         self.geometry_query = nn.Parameter(
-            torch.randn(1, 3, 519, config.tf_d_model),
+            torch.randn(1, config.num_view, 519, config.tf_d_model),
             requires_grad=True,
         )
         
@@ -290,7 +299,7 @@ class W4DModel(nn.Module):
                 dim_feedforward=config.tf_d_ffn,
                 dropout=config.tf_dropout,
                 batch_first=True,
-            ) for _ in range(3)
+            ) for _ in range(config.num_view)
         ])
 
         self.geometry_projector = nn.Sequential(
@@ -310,7 +319,7 @@ class W4DModel(nn.Module):
         self._num_poses = config.trajectory_sampling.num_poses
         #TODO: petr position_embedding
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 20*12 + 1
-        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 1536+1
+        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 512+1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 256+1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 120+1
 
@@ -395,6 +404,7 @@ class W4DModel(nn.Module):
 
         if config.num_mode:
             self._trajectory_head = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model, config.num_mode)
+            self._trajectory_head_for_refine = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model, config.num_mode)
         else:
             self._trajectory_head = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model)
 
@@ -458,6 +468,7 @@ class W4DModel(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=-1)
         return pos
 
+    # @timed
     def forward_test(self, features) -> Dict[str, torch.Tensor]:
         dino_feature, geometry_feature = features['camera_feature']
         b, n, seq_len, dim = dino_feature.shape  # [b, 3, 256, 1024]
@@ -481,7 +492,7 @@ class W4DModel(nn.Module):
         # v2: use learnable query do cross attention with each view dino feature
         init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 512, 1024] -> [bs, 3, 512, 1024]
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 512, 1024]
-        for i in range(3):
+        for i in range(self._config.num_view):
             vision_query = init_view_query_feat[:, i]  # [bs, 512, 1024]
             camera_kv = dino_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
@@ -491,11 +502,12 @@ class W4DModel(nn.Module):
         # geometry query to interact with dino feature of each view
         init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 519, 1024] -> [bs, 3, 519, 1024]
         geometry_feat = torch.zeros_like(init_geometry_query)
-        for i in range(3):
+        for i in range(self._config.num_view):
             geometry_query = init_geometry_query[:, i]  # [bs, 519, 1024]
-            camera_kv = dino_feature[:, i]  # [bs, 519, 1024]
+            camera_kv = dino_feature[:, i, 1:]  # [bs, seq_len, dim]
             geometry_feat[:, i] = self.geometry_decoder[i](geometry_query, camera_kv)
         
+        geometry_feat_for_refine = geometry_feat[:, :, 7:, :].reshape(b, -1, dim)  # [b, 3*512, 1024]
         geometry_feat = self.geometry_projector(geometry_feat)  # [b, 3*519, 1024] -> [b, 3*519, 2048]
 
         # =============================== keyval trans =======================================
@@ -554,7 +566,8 @@ class W4DModel(nn.Module):
         cmd_pred = torch.argmax(cmd_logits, dim=-1)  # [bs]
 
         # =============================== 轨迹输出 ===========================================
-        trajectory = self._trajectory_head(ego_query_out, cmd=cmd)
+        trajectory = {}
+        trajectory['first_trajectory'] = self._trajectory_head(ego_query_out, cmd=cmd)
       
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
@@ -573,15 +586,15 @@ class W4DModel(nn.Module):
             trajectory['cur_latent']=wm_target
 
             # refine the trajectory
-            geometry_feat_for_refine = geometry_feat[:, :, 7:, 1024:].reshape(b, -1, dim)
-            refine_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
-            refine_traj = self._trajectory_head(refine_traj_feat, cmd=cmd)
-            trajectory.update(refine_traj)
+            refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            refined_traj = self._trajectory_head_for_refine(refined_traj_feat, cmd=cmd)
+            trajectory['refined_trajectory'] = refined_traj
 
             return trajectory
         else:
             return trajectory
 
+    @timed
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
         # unpack the camera_feature to get dino feature and geometry feature
         dino_feature, geometry_feature = features['camera_feature']
@@ -604,26 +617,37 @@ class W4DModel(nn.Module):
         # img_feat = camera_feature[:, :, 1:, :].reshape(b, -1, dim)
         
         # v2: use learnable query do cross attention with each view dino feature
+        start_time = time.time()
+
         init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 512, 1024] -> [bs, 3, 512, 1024]
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 512, 1024]
-        for i in range(3):
+        for i in range(self._config.num_view):
             vision_query = init_view_query_feat[:, i]  # [bs, 512, 1024]
             camera_kv = dino_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
+
+        print(f"view_decoder time: {time.time() - start_time}")
             
         spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 1536, 1024]
 
         # geometry query to interact with dino feature of each view
+        start_time = time.time()
+
         init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 519, 1024] -> [bs, 3, 519, 1024]
         geometry_feat = torch.zeros_like(init_geometry_query)
-        for i in range(3):
+        for i in range(self._config.num_view):
             geometry_query = init_geometry_query[:, i]  # [bs, 519, 1024]
             camera_kv = dino_feature[:, i]  # [bs, 519, 1024]
             geometry_feat[:, i] = self.geometry_decoder[i](geometry_query, camera_kv)
         
+        geometry_feat_for_refine = geometry_feat[:, :, 7:, :].reshape(b, -1, dim)  # [b, 3*512, 1024]
         geometry_feat = self.geometry_projector(geometry_feat)  # [b, 3, 519, 1024] -> [b, 3, 519, 2048]
 
+        print(f"geometry_decoder time: {time.time() - start_time}")
+
         # =============================== keyval trans =======================================
+        start_time = time.time()
+
         status_encoding = self._status_encoding(status_feature)  # [bs, 1024]
         keyval = torch.cat([spatial_view_feat, status_encoding[:, None]], dim=1)  # [bs, 1536+1, 1024]
         keyval = keyval.clone() + self._keyval_embedding.weight[None, ...]
@@ -673,11 +697,14 @@ class W4DModel(nn.Module):
 
         ego_query_out = self._tf_decoder(ego_query, keyval_final)
 
+        print(f"ego_query_decoder time: {time.time() - start_time}")
         ##==============================轨迹特征提取========================================
 
        
 
         ##==============================控制命令预测==============================================
+        start_time = time.time()
+
         cmd_query = self._cmd_pred_query.weight[None, ...].repeat(batch_size, 1, 1)  # [bs, 1, 256]
         cmd_query_out = self._cmd_head_decoder(cmd_query, keyval_final)  #
 
@@ -686,8 +713,13 @@ class W4DModel(nn.Module):
         # cmd_pred = torch.argmax(cmd_logits[:, :3], dim=-1)  # [bs]
         cmd_pred = torch.argmax(cmd_logits, dim=-1)  # [bs]
 
+        print(f"cmd_head_decoder time: {time.time() - start_time}")
 
-        trajectory = self._trajectory_head(ego_query_out, cmd=cmd)
+        start_time = time.time()
+        trajectory = {}
+        trajectory['first_trajectory'] = self._trajectory_head(ego_query_out, cmd=cmd)
+
+        print(f"first trajectory_head time: {time.time() - start_time}")
 
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
@@ -695,7 +727,7 @@ class W4DModel(nn.Module):
 
         # record the geometry feature and gt
         trajectory['geometry_predict'] = geometry_feat
-        trajectory['geometry_gt'] = geometry_feature[:, 0, ...]
+        trajectory['geometry_gt'] = geometry_feature[:, 0, ...]  # [bs, 1, n, 519, 2048] -> [bs, n, 519, 2048]
        
 
         # # 如果rl，则输出方差
@@ -705,6 +737,8 @@ class W4DModel(nn.Module):
         #     trajectory['keyval_final'] = keyval_final
 
         if self._config.use_wm:
+            start_time = time.time()
+
             wm_keyval = keyval_final
             wm_target = keyval_final
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
@@ -712,17 +746,41 @@ class W4DModel(nn.Module):
             trajectory['wm_next_latent']=wm_next_latent
             trajectory['cur_latent']=wm_target
 
+            print(f"wm_decoder time: {time.time() - start_time}")
             # refine the trajectory
-            geometry_feat_for_refine = geometry_feat[:, :, 7:, 1024:].reshape(b, -1, dim)
-            refine_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
-            refine_traj = self._trajectory_head(refine_traj_feat, cmd=cmd)
-            trajectory.update(refine_traj)
+            start_time = time.time()
 
+            refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            refined_traj = self._trajectory_head(refined_traj_feat, cmd=cmd)
+            trajectory['refined_trajectory'] = refined_traj
+
+            print(f"refined trajectory_head time: {time.time() - start_time}")
             return trajectory
         else:
             return trajectory
     
+    def compute_traj_loss(self, trajectories, gt):
+        loss_dict = {}
+        all_trajs = trajectories.get("all_trajectories")  # [B, M, T, 3]
+        B, M = all_trajs.shape[0], all_trajs.shape[1]
+        
+        # 原 hard winner-take-all 方式
+        traj_gt_dist = torch.norm(all_trajs[..., :2] - gt[:, None, :, :2], p=1, dim=-1)  # [B,M,T]
+        fde_dist = traj_gt_dist[:, :, -1]  # [B,M]
+        best_mode = torch.argmin(fde_dist, dim=-1)  # [B]
+        best_traj = all_trajs[torch.arange(B), best_mode]
+        trajectory_loss = torch.nn.functional.l1_loss(best_traj, gt)
+
+        # 分类 hard label
+        if "cls_logits" in trajectories:
+            cls_loss = torch.nn.functional.cross_entropy(trajectories["cls_logits"], best_mode)
+            loss_dict["cls_loss"] = cls_loss * self.traj_cls_loss_weight
+
+        loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
+        return loss_dict
+
     # the loss function for world model
+    @timed
     def compute_loss(
         self,
         features: Dict[str, torch.Tensor],
@@ -732,81 +790,30 @@ class W4DModel(nn.Module):
     ) -> torch.Tensor:
         loss_dict = {}
         # ========================= 多模态监督 =========================
-        if self._config.num_mode and logging_prefix == 'train':
-            all_trajs = predictions.get("all_trajectories")  # [B, M, T, 3]
+        if self._config.num_mode:
+            # first trajectory
+            first_trajectory = predictions['first_trajectory']
+            refined_trajectory = predictions['refined_trajectory']
             gt = targets["trajectory"]  # [B, T, 3]
-            B, M = all_trajs.shape[0], all_trajs.shape[1]
 
-            # 计算 per-mode 误差 (ADE/FDE)
-            diff = all_trajs - gt[:, None]  # [B,M,T,3]
-            l1_per_t = diff.abs().mean(-1)  # [B,M,T]
-            ade = l1_per_t.mean(-1)  # [B,M]
-            fde = l1_per_t[:, :, -1]  # [B,M]
+            # first trajectory loss
+            first_traj_loss_dict = self.compute_traj_loss(first_trajectory, gt)
+            refined_traj_loss_dict = self.compute_traj_loss(refined_trajectory, gt)
 
-            if self.soft_resp:  # 软责任
-                # 选择加权依据（FDE 或 ADE）
-                dist_for_weight = fde if self.use_fde_for_weight else ade  # [B,M]
-                # Top-K 过滤
-                if self.soft_resp_topk and self.soft_resp_topk < M:
-                    # 取距离最小的K个索引
-                    topk_val, topk_idx = torch.topk(-dist_for_weight, k=self.soft_resp_topk, dim=1)  # 负号=最小
-                    mask = torch.zeros_like(dist_for_weight, dtype=torch.bool)
-                    mask.scatter_(1, topk_idx, True)
-                    # 对未入选的模式给予一个很大的距离(或直接置 -inf logit)
-                    large = 1e6
-                    dist_masked = dist_for_weight.clone()
-                    dist_masked[~mask] = large
-                    weights = torch.softmax(-dist_masked / max(self.soft_resp_tau, 1e-6), dim=1)
-                else:
-                    weights = torch.softmax(-dist_for_weight / max(self.soft_resp_tau, 1e-6), dim=1)  # [B,M]
-
-                # 回归损失: 每模式 L1 平均 (也可用 l1_per_t.mean(-1))
-                per_mode_traj_loss = l1_per_t.mean(-1)  # [B,M]
-                trajectory_loss = (per_mode_traj_loss * weights).sum(-1).mean()
-
-                # 分类软标签损失
-                if "cls_logits" in predictions:
-                    log_probs = F.log_softmax(predictions["cls_logits"], dim=-1)
-                else:
-                    log_probs = None
-
-                if log_probs is not None:
-                    cls_loss = -(weights * log_probs).sum(-1).mean()
-                    loss_dict["cls_loss"] = cls_loss * self.traj_cls_loss_weight
-                    if self.cls_entropy_weight > 0:
-                        probs = log_probs.exp()
-                        entropy = -(probs * log_probs).sum(-1).mean()
-                        # 希望保持一定熵 → 最大化熵 → 加上 -entropy 系数为负, 这里直接减去熵
-                        loss_dict["cls_entropy"] = -entropy * self.cls_entropy_weight
-            # elif self._config.num_mode and logging_prefix == 'train' and self._config.use_vocab_trajs:
-            #     tokens = features['token']
-            #     N = 19
-            #     for token in tokens:
-            #         cur_vocab_trajs_dict = vocab_trajs_dict[token]  
-            #         # 根据pdms分数，取top N
-            #         top_n_idx = cur_vocab_trajs_dict['pdm_score'].topk(N, dim=0).indices
-            #         top_n_trajs = vocab_trajs[top_n_idx]  # np (N, 40, 3)
-            #     pass
-            else:
-                # 原 hard winner-take-all 方式
-                traj_gt_dist = torch.norm(all_trajs[..., :2] - gt[:, None, :, :2], p=1, dim=-1)  # [B,M,T]
-                fde_dist = traj_gt_dist[:, :, -1]  # [B,M]
-                best_mode = torch.argmin(fde_dist, dim=-1)  # [B]
-                best_traj = all_trajs[torch.arange(B), best_mode]
-                trajectory_loss = torch.nn.functional.l1_loss(best_traj, gt)
-
-                # 分类 hard label
-                if "cls_logits" in predictions:
-                    cls_loss = torch.nn.functional.cross_entropy(predictions["cls_logits"], best_mode)
-                    loss_dict["cls_loss"] = cls_loss * self.traj_cls_loss_weight
-
-            loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
+            loss_dict.update(
+                {
+                    "first_traj_loss": first_traj_loss_dict["traj_loss"],
+                    # "refined_traj_loss": refined_traj_loss_dict["traj_loss"],
+                    "first_cls_loss": first_traj_loss_dict["cls_loss"],
+                    # "refined_cls_loss": refined_traj_loss_dict["cls_loss"],
+                }
+            )
 
             ## 控制命令预测loss
             if "cmd_logits" in predictions:
                 cmd = predictions['cmd_gt']
                 cmd_loss = torch.nn.functional.cross_entropy(predictions["cmd_logits"], cmd)
-                loss_dict["cmd_loss"] = cmd_loss * self._config.traj_cmd_loss_weight
+                # loss_dict["cmd_loss"] = cmd_loss * self._config.traj_cmd_loss_weight
 
             # 多样性损失（终点排斥）—— 与软/硬责任无关
             if self.diversity_loss_weight > 0:
@@ -860,6 +867,7 @@ class TrajectoryHead(nn.Module):
             nn.Linear(self._d_ffn, 1),
         )
 
+    # @timed
     def forward(self, object_queries, pred_cmd=None, cmd=None) -> Dict[str, torch.Tensor]:
         if self._num_mode:
             poses = self._mlp(object_queries).reshape(-1, self._num_mode, self._num_poses, StateSE2Index.size())

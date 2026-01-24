@@ -35,7 +35,12 @@ def dump_feature_target_to_pickle(path: Path, data_dict: Dict[str, torch.Tensor]
     data_dict_cpu = {k: v.float().detach().cpu() for k, v in data_dict.items()}
     with gzip.open(path, "wb", compresslevel=1) as f:
         pickle.dump(data_dict_cpu, f)
-        
+
+def load_feature_target_from_pickle(path: Path) -> Dict[str, torch.Tensor]:
+    """Helper function to load pickled feature/target from path."""
+    with gzip.open(path, "rb") as f:
+        data_dict: Dict[str, torch.Tensor] = pickle.load(f)
+    return data_dict
 class TransfuserFeatureBuilder(AbstractFeatureBuilder):
     """Input feature builder for TransFuser."""
 
@@ -58,9 +63,9 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             self.geometry_processor.crop_size = {'height': 224, 'width': 448}
             self.geometry_processor.do_normalize = False
 
-        self.fixing_cache = True
+        self.fixing_cache = False
         if self.fixing_cache:
-            self.broken_file_list = json.load(open('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_test_corrupted_files.json', 'r'))
+            self.broken_file_list = json.load(open('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_test_single_view_corrupted_files.json', 'r'))
 
     def get_unique_name(self) -> str:
         """Inherited, see superclass."""
@@ -81,7 +86,8 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
 
         cond_flags = [1, 0, 1]  # [camera_pose, depth, intrinsics]
 
-        use_amp = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        # use_amp = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        use_amp = False
         if use_amp:
             amp_dtype = torch.bfloat16
         else:
@@ -274,12 +280,25 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         
         for token_name, cache_feature in save_dict.items():
             save_path = feature_cache_path / f"{token_name}.gz"
-            if token_name in self.broken_file_list:
+            if self.fixing_cache and token_name in self.broken_file_list:
                 if save_path.exists():
                     print(f"跳过已存在的文件: {save_path}")
                     continue
                 print(f"重新计算并 cache feature: {token_name}")
                 dump_feature_target_to_pickle(save_path, cache_feature)
+            else:
+                if save_path.exists():
+                    print(f"跳过已存在的文件: {save_path}")
+                    continue
+                dump_feature_target_to_pickle(save_path, cache_feature)
+                while True:
+                    try:
+                        data_dict = load_feature_target_from_pickle(save_path)
+                        break
+                    except Exception as e:
+                        print(f"Error loading {save_path}: {e}, cache again...")
+                        dump_feature_target_to_pickle(save_path, cache_feature)
+
             
         return final_features
 
@@ -364,14 +383,12 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         cameras = agent_input.cameras[3]
 
         # Crop to ensure 4:1 aspect ratio
-        l0 = cameras.cam_l0.image
-        f0 = cameras.cam_f0.image
-        r0 = cameras.cam_r0.image
 
         image_list = []
         intrinsics_list = []
         extrinsics_list = []
-        for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+        # for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+        for camera_token in ['cam_f0']:
             camera = cameras.__getattribute__(camera_token)
             
             intrinsic = torch.tensor(
@@ -412,7 +429,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             image_list = []
             intrinsics_list = []
             extrinsics_list = []
-            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+            for camera_token in ['cam_f0']:
                 camera = cameras.__getattribute__(camera_token)
                 
                 intrinsic = torch.tensor(
@@ -456,7 +473,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             image_list = []
             intrinsics_list = []
             extrinsics_list = []
-            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
+            for camera_token in ['cam_f0']:
                 camera = cameras.__getattribute__(camera_token)
                 
                 intrinsic = torch.tensor(

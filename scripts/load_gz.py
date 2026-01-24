@@ -9,6 +9,7 @@ import pickle
 import sys
 from pathlib import Path
 import torch
+from tqdm import tqdm
 
 def load_feature_target_from_pickle(path: Path) -> dict:
     """Helper function to load pickled feature/target from path."""
@@ -16,35 +17,25 @@ def load_feature_target_from_pickle(path: Path) -> dict:
         data_dict = pickle.load(f)
     return data_dict
 
+def dump_feature_target_to_pickle(path: Path, data_dict) -> None:
+    """Helper function to save feature/target to pickle."""
+    # Use compresslevel = 1 to compress the size but also has fast write and read.
+    with gzip.open(path, "wb", compresslevel=1) as f:
+        pickle.dump(data_dict, f)
+
 def read_gz_file_simple(file_path):
     """读取并显示gz文件内容（使用navsim项目的方法）"""
     try:
         file_path = Path(file_path)
         data_dict = load_feature_target_from_pickle(file_path)
         
-        print(f"文件: {file_path}")
-        print(f"大小: {file_path.stat().st_size} 字节")
-        print("内容类型:", type(data_dict))
-        print("键名:", list(data_dict.keys()) if isinstance(data_dict, dict) else "数据不是字典类型")
-        
-        # 显示每个键的数据信息
-        if isinstance(data_dict, dict):
-            for key, value in data_dict.items():
-                print(f"  键 '{key}': 类型={type(value)}, 形状={getattr(value, 'shape', 'N/A') if torch.is_tensor(value) else 'N/A'}")
-                
-                # 如果是张量，显示基本统计信息
-                if torch.is_tensor(value):
-                    print(f"    最小值: {value.min().item() if value.numel() > 0 else 'N/A'}")
-                    print(f"    最大值: {value.max().item() if value.numel() > 0 else 'N/A'}")
-                    print(f"    平均值: {value.mean().item() if value.numel() > 0 else 'N/A'}")
-                elif hasattr(value, '__len__'):
-                    print(f"    长度: {len(value)}")
-                
-                print()
-        else:
-            print("数据内容:", data_dict)
-            
-        print("-" * 50)
+        new_data_dict = {
+            'dino_feature': data_dict['dino_feature'][None, None, 1, ...],
+            'geometry_feature': data_dict['geometry_feature'][:, None, 1, ...]
+        }
+
+        single_view_path = Path(str(file_path.parent) + '_single_view') / (file_path.stem + ".gz")
+        dump_feature_target_to_pickle(single_view_path, new_data_dict)
         
     except Exception as e:
         print(f"读取文件 {file_path} 时出错: {e}")
@@ -68,7 +59,7 @@ def find_and_read_gz_files_simple(directory_path):
         return
     
     print(f"找到 {len(gz_files)} 个.gz文件:")
-    for gz_file in gz_files:
+    for gz_file in tqdm(gz_files):
         read_gz_file_simple(gz_file)
 
 if __name__ == "__main__":

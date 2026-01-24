@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Tuple
 import numpy as np
+import time
 
 import pytorch_lightning as pl
 import torch
@@ -15,7 +16,14 @@ from navsim.agents.transfuser.utils.util import CosineScheduler
 
 
 
-
+def timed(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f"{func.__qualname__} took {end - start:.4f} seconds to execute\n")
+        return result
+    return wrapper
 
 class AgentLightningModule(pl.LightningModule):
     """Pytorch lightning wrapper for learnable agent."""
@@ -31,6 +39,7 @@ class AgentLightningModule(pl.LightningModule):
         self._cfg = cfg
         self.agent = agent
 
+    @timed
     def _step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], logging_prefix: str) -> Tensor:
         """
         Propagates the model forward and backwards and computes/logs losses and metrics.
@@ -46,18 +55,18 @@ class AgentLightningModule(pl.LightningModule):
             # current t
             prediction = self.agent.forward_train(features)
             
-            # prev t-1
-            prev_features = {}
-            prev_features['camera_feature'] = features['camera_feature_prev_3']
-            prev_features['status_feature'] = features['status_feature_prev_3']
+            # # prev t-1
+            # prev_features = {}
+            # prev_features['camera_feature'] = features['camera_feature_prev_3']
+            # prev_features['status_feature'] = features['status_feature_prev_3']
 
-            prev_targets = {}
-            prev_targets['trajectory'] = targets['trajectory_prev_3']
+            # prev_targets = {}
+            # prev_targets['trajectory'] = targets['trajectory_prev_3']
 
-            # self.agent._transfuser_model.prev_keyval_feat = None
-            prev_prediction = self.agent.forward_train(prev_features)
+            # # self.agent._transfuser_model.prev_keyval_feat = None
+            # prev_prediction = self.agent.forward_train(prev_features)
             
-            prev_prediction['next_latent'] = prediction['cur_latent']
+            # prev_prediction['next_latent'] = prediction['cur_latent']
             
             # next t+8
             next_features = {}
@@ -69,14 +78,15 @@ class AgentLightningModule(pl.LightningModule):
             prediction['next_latent'] = next_prediction['cur_latent']
 
             # compute loss
-            prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)            
+            # prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)          
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
             
-            # 为prev_loss中的损失项添加前缀prev_
-            prev_loss = {f'prev_{k}': v for k, v in prev_loss.items()}
+            # # 为prev_loss中的损失项添加前缀prev_
+            # prev_loss = {f'prev_{k}': v for k, v in prev_loss.items()}
 
-            # 合并两个损失字典
-            loss = {**prev_loss, **cur_loss}
+            # # 合并两个损失字典
+            # loss = {**prev_loss, **cur_loss}
+            loss = {**cur_loss}
 
 
         elif logging_prefix=='val' and not self._cfg.use_wm:
@@ -84,12 +94,12 @@ class AgentLightningModule(pl.LightningModule):
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
 
         elif logging_prefix=='val' and self._cfg.use_wm:
-            # 间隔2 frame
-            prev_features = {}
-            prev_features['camera_feature'] = features['camera_feature_prev_3']
-            prev_features['status_feature'] = features['status_feature_prev_3']
+            # # 间隔2 frame
+            # prev_features = {}
+            # prev_features['camera_feature'] = features['camera_feature_prev_3']
+            # prev_features['status_feature'] = features['status_feature_prev_3']
 
-            prev_prediction = self.agent.forward_test(prev_features)
+            # prev_prediction = self.agent.forward_test(prev_features)
 
             prediction = self.agent.forward_test(features)
 

@@ -12,7 +12,7 @@ def delete_files_from_json(json_path):
     error_count = 0
     
     for file_path in file_list:
-        path = Path('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_geometry_cache_trainval/feature_cache') / Path(file_path + '.gz')
+        path = Path('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_geometry_cache_trainval_single_view/feature_cache') / Path(file_path + '.gz')
         try:
             if path.exists():
                 path.unlink()
@@ -30,5 +30,4 @@ def delete_files_from_json(json_path):
     
     print(f"\n统计: 成功删除 {deleted_count} 个文件, 失败 {error_count} 个")
 
-# 使用
-delete_files_from_json('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_trainval_corrupted_files.json')
+delete_files_from_json('/vepfs-mlp2/c20250502/haoce/wlb/world4drive/dino_geometry_cache_trainval_single_view_corrupted_files.json')
