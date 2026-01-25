@@ -39,7 +39,7 @@ class AgentLightningModule(pl.LightningModule):
         self._cfg = cfg
         self.agent = agent
 
-    @timed
+    # @timed
     def _step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], logging_prefix: str) -> Tensor:
         """
         Propagates the model forward and backwards and computes/logs losses and metrics.
@@ -68,14 +68,14 @@ class AgentLightningModule(pl.LightningModule):
             
             # prev_prediction['next_latent'] = prediction['cur_latent']
             
-            # next t+8
-            next_features = {}
-            next_features['camera_feature'] = features['camera_feature_next_8']
-            next_features['status_feature'] = features['status_feature_next_8']
+            # # next t+8
+            # next_features = {}
+            # next_features['camera_feature'] = features['camera_feature_next_8']
+            # next_features['status_feature'] = features['status_feature_next_8']
             
-            next_prediction = self.agent.forward_train(next_features)
-
-            prediction['next_latent'] = next_prediction['cur_latent']
+            # next_prediction = self.agent.forward_train(next_features)
+            gt_next_latent, _ = features['camera_feature']
+            prediction['next_latent'] = gt_next_latent[:, 0, 1:, :]  # [b, 512, 1024]
 
             # compute loss
             # prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)          
@@ -103,14 +103,14 @@ class AgentLightningModule(pl.LightningModule):
 
             prediction = self.agent.forward_test(features)
 
-            # next t+8
-            next_features = {}
-            next_features['camera_feature'] = features['camera_feature_next_8']
-            next_features['status_feature'] = features['status_feature_next_8']
+            # # next t+8
+            # next_features = {}
+            # next_features['camera_feature'] = features['camera_feature_next_8']
+            # next_features['status_feature'] = features['status_feature_next_8']
             
-            next_prediction = self.agent.forward_train(next_features)
-
-            prediction['next_latent'] = next_prediction['cur_latent']
+            # next_prediction = self.agent.forward_train(next_features)
+            gt_next_latent, _ = features['camera_feature']
+            prediction['next_latent'] = gt_next_latent[:, 0, 1:, :]  # [b, 512, 1024]
 
             # prediction = self.agent.forward_test(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
@@ -237,13 +237,18 @@ class AgentLightningModule(pl.LightningModule):
                     prev_features['status_feature'] = features['status_feature_prev_3']
 
                     self.agent._transfuser_model.prev_keyval_feat = None
-                    prev_prediction = self.agent.forward_test(prev_features)
-
-                    prediction = self.agent.forward_test(features)
+                    if self._cfg.use_refine:
+                        prev_prediction = self.agent.forward_test(prev_features)['refined_trajectory']
+                        prediction = self.agent.forward_test(features)['refined_trajectory']
+                    else:
+                        prev_prediction = self.agent.forward_test(prev_features)['first_trajectory']
+                        prediction = self.agent.forward_test(features)['first_trajectory']
                     
                 else:
                     prediction = self.agent.forward_test(features)
 
+                for k, v in prediction.items():
+                    prediction[k] = v.to(torch.float32)
                 poses = prediction['trajectory'].cpu().numpy()  # (B, T, 3)
                 cls_logits = prediction['cls_logits'].cpu().numpy()
                 all_trajectories = prediction['all_trajectories'].cpu().numpy() # (B, K, T, 3)

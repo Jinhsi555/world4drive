@@ -58,6 +58,7 @@ config:
 
   cache_mode: false
   num_view: 3
+  use_refine: False
 
 lr: 1e-4
 checkpoint_path: null

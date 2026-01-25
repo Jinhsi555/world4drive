@@ -2,8 +2,8 @@
 dataloader:
   params:
 #    train
-    batch_size: 32  # number of samples per batch
-    num_workers: 32  # number of workers for data loading
+    batch_size: 8  # number of samples per batch
+    num_workers: 12  # number of workers for data loading
     pin_memory: true  # pin memory for faster GPU transfer
     prefetch_factor: 2
     # persistent_workers: True

@@ -125,6 +125,7 @@ class TransfuserConfig:
     ## world4drive config
     num_mode: int = 18
     num_view: int = 3
+    use_refine: bool = False
     traj_loss_weight: float = 1.0
     traj_cls_loss_weight: float = 0.2
     diversity_loss_weight: float = 0.0

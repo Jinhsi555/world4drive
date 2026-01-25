@@ -311,7 +311,7 @@ class W4DModel(nn.Module):
         self.geometry_loss_weight = 0.2
 
         # refine net
-        self.refine_traj_decoder = BridgeAttentionTransformer(config)
+        # self.refine_traj_decoder = BridgeAttentionTransformer(config)
 
         # self.image_fc = nn.Linear(512, 256)
         self._status_encoding = nn.Linear(4 + 2 + 2, config.tf_d_model)
@@ -441,7 +441,7 @@ class W4DModel(nn.Module):
         self.use_all_mb = config.use_all_mb if hasattr(config, 'use_all_mb') else False
 
         if self._config.use_wm:
-            num_wm_query = num_keyval
+            num_wm_query = num_keyval-1
             self._wm_query_embedding = nn.Embedding(num_wm_query, config.tf_d_model)
             wm_decoder_layer = nn.TransformerDecoderLayer(
                 d_model=config.tf_d_model,
@@ -586,15 +586,15 @@ class W4DModel(nn.Module):
             trajectory['cur_latent']=wm_target
 
             # refine the trajectory
-            refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
-            refined_traj = self._trajectory_head(refined_traj_feat, cmd=cmd)
-            trajectory['refined_trajectory'] = refined_traj
+            # refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            # refined_traj = self._trajectory_head_for_refine(refined_traj_feat, cmd=cmd)
+            # trajectory['refined_trajectory'] = refined_traj
 
             return trajectory
         else:
             return trajectory
 
-    # @timed
+    @timed
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
         # unpack the camera_feature to get dino feature and geometry feature
         dino_feature, geometry_feature = features['camera_feature']
@@ -747,14 +747,15 @@ class W4DModel(nn.Module):
             trajectory['cur_latent']=wm_target
 
             print(f"wm_decoder time: {time.time() - start_time}")
+            
             # refine the trajectory
-            start_time = time.time()
+            # start_time = time.time()
 
-            refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
-            refined_traj = self._trajectory_head(refined_traj_feat, cmd=cmd)
-            trajectory['refined_trajectory'] = refined_traj
+            # refined_traj_feat = self.refine_traj_decoder(ego_query_out, wm_next_latent, geometry_feat_for_refine)
+            # refined_traj = self._trajectory_head(refined_traj_feat, cmd=cmd)
+            # trajectory['refined_trajectory'] = refined_traj
 
-            print(f"refined trajectory_head time: {time.time() - start_time}")
+            # print(f"refined trajectory_head time: {time.time() - start_time}")
             return trajectory
         else:
             return trajectory
@@ -793,18 +794,18 @@ class W4DModel(nn.Module):
         if self._config.num_mode:
             # first trajectory
             first_trajectory = predictions['first_trajectory']
-            refined_trajectory = predictions['refined_trajectory']
+            # refined_trajectory = predictions['refined_trajectory']
             gt = targets["trajectory"]  # [B, T, 3]
 
             # first trajectory loss
             first_traj_loss_dict = self.compute_traj_loss(first_trajectory, gt)
-            refined_traj_loss_dict = self.compute_traj_loss(refined_trajectory, gt)
+            # refined_traj_loss_dict = self.compute_traj_loss(refined_trajectory, gt)
 
             loss_dict.update(
                 {
                     "first_traj_loss": first_traj_loss_dict["traj_loss"],
-                    "refined_traj_loss": refined_traj_loss_dict["traj_loss"],
-                    # "first_cls_loss": first_traj_loss_dict["cls_loss"],
+                    # "refined_traj_loss": refined_traj_loss_dict["traj_loss"],
+                    "first_cls_loss": first_traj_loss_dict["cls_loss"],
                     # "refined_cls_loss": refined_traj_loss_dict["cls_loss"],
                 }
             )
@@ -835,7 +836,7 @@ class W4DModel(nn.Module):
 
         # 世界模型损失
         if self._config.use_wm_training and 'wm_next_latent' in predictions:
-            wm_loss_a = torch.nn.functional.mse_loss(predictions["wm_next_latent"], predictions["next_latent"].detach())
+            wm_loss_a = torch.nn.functional.mse_loss(predictions["wm_next_latent"], predictions["next_latent"])
             loss_dict["wm_loss"] = wm_loss_a * self.wm_loss_weight
 
         # geometry feature loss

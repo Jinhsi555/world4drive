@@ -191,7 +191,7 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
         """
         return len(self.tokens)
 
-    @timed
+    # @timed
     def __getitem__(self, idx: int) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Loads and returns pair of feature and target dict from data.

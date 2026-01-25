@@ -98,6 +98,8 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_v14 import W4DModel
         elif self._config.model_version == 15:
             from navsim.agents.transfuser.w4d_model_v15 import W4DModel
+        elif self._config.model_version == 16:
+            from navsim.agents.transfuser.w4d_model_v16 import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)
