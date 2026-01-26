@@ -74,8 +74,8 @@ class AgentLightningModule(pl.LightningModule):
             # next_features['status_feature'] = features['status_feature_next_8']
             
             # next_prediction = self.agent.forward_train(next_features)
-            gt_next_latent, _ = features['camera_feature']
-            prediction['next_latent'] = gt_next_latent[:, 0, 1:, :]  # [b, 512, 1024]
+            # gt_next_latent, _ = features['camera_feature']
+            # prediction['next_latent'] = gt_next_latent[:, 0, 1:, :]  # [b, 512, 1024]
 
             # compute loss
             # prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)          

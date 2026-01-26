@@ -241,11 +241,11 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
             data_dict = load_feature_target_from_pickle(data_dict_path)
-            for frame_name, frame_token in data_dict.items():
-                if 'camera_feature' in frame_name:
-                    dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
-                    frame_dict = load_feature_target_from_pickle(dino_feature_path)
-                    data_dict[frame_name] = (frame_dict['dino_feature'], frame_dict['geometry_feature'])
+            # for frame_name, frame_token in data_dict.items():
+            #     if 'camera_feature' in frame_name:
+            #         dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
+            #         frame_dict = load_feature_target_from_pickle(dino_feature_path)
+            #         data_dict[frame_name] = (frame_dict['dino_feature'], frame_dict['geometry_feature'])
             features.update(data_dict)
 
         targets: Dict[str, torch.Tensor] = {}

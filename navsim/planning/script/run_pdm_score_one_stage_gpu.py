@@ -251,12 +251,20 @@ def main(cfg: DictConfig) -> None:
         scene_filter=scene_filter,
         sensor_config=agent.get_sensor_config(),
     )
-    dataset = CacheOnlyDatasetParallel(
-            cache_path=cfg.cache_path,
-            feature_builders=agent.get_feature_builders(),
-            target_builders=agent.get_target_builders(),
-            log_names=cfg.test_logs,
-        )
+    # dataset = CacheOnlyDatasetParallel(
+    #         cache_path=cfg.cache_path,
+    #         feature_builders=agent.get_feature_builders(),
+    #         target_builders=agent.get_target_builders(),
+    #         log_names=cfg.test_logs,
+    #     )
+    dataset = Dataset(
+        scene_loader=scene_loader_inference,
+        feature_builders=agent.get_feature_builders(),
+        target_builders=agent.get_target_builders(),
+        cache_path=None,
+        force_cache_computation=False,
+        is_training=False,
+    )
     dataloader = DataLoader(dataset, **cfg.dataloader.params, shuffle=False)
     worker = build_worker(cfg)
 

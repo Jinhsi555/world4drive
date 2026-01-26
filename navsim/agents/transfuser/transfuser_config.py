@@ -69,11 +69,18 @@ class TransfuserConfig:
     cache_mode: bool = False
 
     # Transformer
-    tf_d_model: int = 1024
-    tf_d_ffn: int = 1024
+    tf_d_model: int = 384
+    tf_d_ffn: int = 1536
     tf_num_layers: int = 3
     tf_num_head: int = 8
     tf_dropout: float = 0.0
+
+    # LoRA config
+    use_lora: bool = True
+    lora_rank: int = 32
+    lora_alpha: int = 64
+    lora_dropout: float = 0.1
+    lora_target_modules: str = "all-linear"
 
     # detection
     num_bounding_boxes: int = 30
@@ -125,6 +132,7 @@ class TransfuserConfig:
     ## world4drive config
     num_mode: int = 18
     num_view: int = 3
+    num_scene_query_token: int = 16
     use_refine: bool = False
     traj_loss_weight: float = 1.0
     traj_cls_loss_weight: float = 0.2

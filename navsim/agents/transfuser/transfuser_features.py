@@ -41,6 +41,13 @@ def load_feature_target_from_pickle(path: Path) -> Dict[str, torch.Tensor]:
     with gzip.open(path, "rb") as f:
         data_dict: Dict[str, torch.Tensor] = pickle.load(f)
     return data_dict
+
+def save_geometry_feature_to_npy(path: Path, geometry_feature: np.ndarray) -> None:
+    """Helper function to save geometry feature to npy."""
+    if geometry_feature.dtype is not np.float32:
+        geometry_feature = geometry_feature.float().cpu()
+    np.save(path, geometry_feature)
+    
 class TransfuserFeatureBuilder(AbstractFeatureBuilder):
     """Input feature builder for TransFuser."""
 
@@ -387,8 +394,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
         image_list = []
         intrinsics_list = []
         extrinsics_list = []
-        # for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
-        for camera_token in ['cam_f0']:
+        for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
             camera = cameras.__getattribute__(camera_token)
             
             intrinsic = torch.tensor(
@@ -429,7 +435,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             image_list = []
             intrinsics_list = []
             extrinsics_list = []
-            for camera_token in ['cam_f0']:
+            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
                 camera = cameras.__getattribute__(camera_token)
                 
                 intrinsic = torch.tensor(
@@ -473,7 +479,7 @@ class TransfuserFeatureBuilder(AbstractFeatureBuilder):
             image_list = []
             intrinsics_list = []
             extrinsics_list = []
-            for camera_token in ['cam_f0']:
+            for camera_token in ['cam_l0', 'cam_f0', 'cam_r0']:
                 camera = cameras.__getattribute__(camera_token)
                 
                 intrinsic = torch.tensor(

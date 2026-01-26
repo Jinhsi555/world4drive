@@ -100,6 +100,8 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_v15 import W4DModel
         elif self._config.model_version == 16:
             from navsim.agents.transfuser.w4d_model_v16 import W4DModel
+        elif self._config.model_version == 17:
+            from navsim.agents.transfuser.w4d_model_v17 import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)
@@ -163,6 +165,10 @@ class TransfuserAgent(AbstractAgent):
         state_dict: Dict[str, Any] = torch.load(self._checkpoint_path, map_location=torch.device("cpu"))[
             "state_dict"
         ]
+        # 打印state_dict的键
+        for key in state_dict.keys():
+            print(f"key: {key}\n")
+            
         ## 过滤掉不匹配的键，比如ref系列的键
         self.load_state_dict(
             {k.replace("agent.", ""): v for k, v in state_dict.items()},

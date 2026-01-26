@@ -93,7 +93,7 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Path where all results are stored: {cfg.output_dir}")
 
     logger.info("Building Agent")
-    agent: AbstractAgent = instantiate(cfg.agent)
+    agent: AbstractAgent = instantiate(cfg.agent).to('cuda' if torch.cuda.is_available() else 'cpu')
 
     logger.info("Building Lightning Module")
     lightning_module = AgentLightningModule(
@@ -113,13 +113,13 @@ def main(cfg: DictConfig) -> None:
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.test_logs[:100],
+            log_names=cfg.train_logs[:10],
         )
         val_data = CacheOnlyDatasetParallel(
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.test_logs[:100],
+            log_names=cfg.val_logs[:30],
         )
     else:
         logger.info("Building SceneLoader")
