@@ -33,23 +33,24 @@
             "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
             "args": [
                 "agent=transfuser_agent",
-                "dataloader.params.batch_size=32",
+                "dataloader.params.batch_size=16",
                 "dataloader.params.num_workers=12",
                 "experiment_name=training_debug",
-                "train_test_split=navtrain",
+                "train_test_split=navtest",
                 "use_cache_without_dataset=True",
                 "force_cache_computation=False",
-                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_feature_cache",
+                "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_feature_cache_test",
                 // "worker=sequential",
-                "agent.config.model_version=15",
+                "agent.config.model_version='refine'",
                 "agent.config.num_mode=4",
                 "agent.config.use_cmd_embed=False",
+                "agent.config.use_wm=True",
                 // "agent.config.action_chunk_size=4",
                 // "agent.config._use_mlp_ensemble=True",
                 // "agent.config.model_name=LAW"  // LAW or W4D
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7",
+                "CUDA_VISIBLE_DEVICES": "0",
                 "NUPLAN_MAP_VERSION": "nuplan-maps-v1.0",
                 "NUPLAN_MAPS_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/datasets/maps",
                 "NAVSIM_EXP_ROOT": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp",
@@ -130,7 +131,7 @@
             "name": "Debug Evaluation",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_gpu_v2.py",
             "args": [
@@ -159,7 +160,7 @@
             "name": "Debug navtest Evaluation",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_gpu_navtest_v2.py",
             "args": [
@@ -190,7 +191,7 @@
             "name": "Debug navtest one stage Evaluation",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_one_stage_gpu.py",
             "args": [
@@ -224,7 +225,7 @@
             "name": "Debug navtest one stage Evaluation epona",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_one_stage_gpu_epona.py",
             "args": [
@@ -259,7 +260,7 @@
             "name": "Debug run_pdm_score_v1_voc_save_info",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_info.py",
             "args": [
@@ -285,7 +286,7 @@
             "name": "Debug run_pdm_score_v2_voc_save_info",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov2.py",
             "args": [
@@ -312,7 +313,7 @@
             "name": "Debug run_pdm_score_v2_voc_save_infov3",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov4.py",
             "args": [
@@ -339,7 +340,7 @@
             "name": "Debug run_pdm_score_v2_voc_save_infov5",
             "type": "debugpy",
             "request": "launch",
-            "pythonPath": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
+            "python": "/mnt/parallel_ssd/home/zdhs0121/miniconda3/envs/w4d/bin/python",
             "cwd": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive",
             "program": "/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/navsim/planning/script/run_pdm_score_v1_voc_save_infov5_debug.py",
             "args": [

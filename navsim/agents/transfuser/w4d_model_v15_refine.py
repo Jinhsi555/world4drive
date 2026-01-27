@@ -163,6 +163,18 @@ class W4DModel(nn.Module):
 
         if config.num_mode:
             self._trajectory_head = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model, config.num_mode)
+
+            self.refine_block = nn.TransformerDecoder(
+                nn.TransformerDecoderLayer(
+                    d_model=config.tf_d_model,
+                    nhead=config.tf_num_head,
+                    dim_feedforward=config.tf_d_ffn,
+                    dropout=config.tf_dropout,
+                    batch_first=True,
+                ), config.tf_num_layers
+            )
+
+            self.refine_traj_head = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model, config.num_mode)
         else:
             self._trajectory_head = TrajectoryHead(self._num_poses, config.tf_d_ffn, config.tf_d_model)
 
@@ -313,8 +325,6 @@ class W4DModel(nn.Module):
 
         # =============================== 轨迹输出 ===========================================
         trajectory = self._trajectory_head(ego_query_out, cmd=cmd)
-      
-
 
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
@@ -322,10 +332,23 @@ class W4DModel(nn.Module):
 
         # wm
         if self.use_wm:
-            wm_keyval = torch.cat([ego_query_out, keyval_final], dim=1)
+            trajectory = {}
+            trajectory['first_traj'] = self._trajectory_head(ego_query_out, cmd=cmd)
+
+            trajectory['cmd_logits'] = cmd_logits
+            trajectory['cmd_pred'] = cmd_pred
+            trajectory['cmd_gt'] = cmd
+
+            wm_keyval = keyval_final
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
             wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
             trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, n, seq_len-1, dim)
+            
+            # refine
+            refine_query = ego_query_out
+            refine_keyval = features['camera_feature_next_8'][:, :, 1:, :].reshape(batch_size, -1, dim)
+            refine_query_out = ego_query_out + self.refine_block(refine_query, refine_keyval)
+            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd)
             
         return trajectory
 
@@ -429,22 +452,30 @@ class W4DModel(nn.Module):
         trajectory['cmd_logits'] = cmd_logits
         trajectory['cmd_pred'] = cmd_pred
         trajectory['cmd_gt'] = cmd
-       
 
-        # # 如果rl，则输出方差
-        # if self.config.training_mode == "ft" or self.config.training_mode == 'bcsl':
-        #     traj_var = self._var_head(ego_query_out)
-        #     trajectory['trajectory_var'] = traj_var
-        #     trajectory['keyval_final'] = keyval_final
-
+        # wm
         if self.use_wm:
-            wm_keyval = torch.cat([ego_query_out, keyval_final], dim=1)
+            trajectory = {}
+            trajectory['first_traj'] = self._trajectory_head(ego_query_out, cmd=cmd)
+
+            trajectory['cmd_logits'] = cmd_logits
+            trajectory['cmd_pred'] = cmd_pred
+            trajectory['cmd_gt'] = cmd
+
+            wm_keyval = keyval_final
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
             wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
             trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, n, seq_len-1, dim)
-            return trajectory
-        else:
-            return trajectory
+            
+            # refine
+            refine_query = ego_query_out
+            refine_keyval = features['camera_feature_next_8'][:, :, 1:, :].reshape(batch_size, -1, dim)
+            refine_query_out = ego_query_out + self.refine_block(refine_query, refine_keyval)
+            
+            # TODO: comupute the refined trajectory with residual
+            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd)
+            
+        return trajectory
     
     # the loss function for world model
     def compute_loss(
@@ -454,77 +485,31 @@ class W4DModel(nn.Module):
         predictions: Dict[str, torch.Tensor],
         logging_prefix: str = None,
     ) -> torch.Tensor:
-        loss_dict = {}
-        # ========================= 多模态监督 =========================
-        if self._config.num_mode and logging_prefix == 'train':
-            all_trajs = predictions.get("all_trajectories")  # [B, M, T, 3]
+
+        def get_traj_loss(traj_dic, targets):
+            all_trajs = traj_dic.get("all_trajectories")  # [B, M, T, 3]
             gt = targets["trajectory"]  # [B, T, 3]
             B, M = all_trajs.shape[0], all_trajs.shape[1]
 
-            # 计算 per-mode 误差 (ADE/FDE)
-            diff = all_trajs - gt[:, None]  # [B,M,T,3]
-            l1_per_t = diff.abs().mean(-1)  # [B,M,T]
-            ade = l1_per_t.mean(-1)  # [B,M]
-            fde = l1_per_t[:, :, -1]  # [B,M]
+            traj_gt_dist = torch.norm(all_trajs[..., :2] - gt[:, None, :, :2], p=1, dim=-1)  # [B,M,T]
+            fde_dist = traj_gt_dist[:, :, -1]  # [B,M]
+            best_mode = torch.argmin(fde_dist, dim=-1)  # [B]
+            best_traj = all_trajs[torch.arange(B), best_mode]
+            trajectory_loss = torch.nn.functional.l1_loss(best_traj, gt)
 
-            if self.soft_resp:  # 软责任
-                # 选择加权依据（FDE 或 ADE）
-                dist_for_weight = fde if self.use_fde_for_weight else ade  # [B,M]
-                # Top-K 过滤
-                if self.soft_resp_topk and self.soft_resp_topk < M:
-                    # 取距离最小的K个索引
-                    topk_val, topk_idx = torch.topk(-dist_for_weight, k=self.soft_resp_topk, dim=1)  # 负号=最小
-                    mask = torch.zeros_like(dist_for_weight, dtype=torch.bool)
-                    mask.scatter_(1, topk_idx, True)
-                    # 对未入选的模式给予一个很大的距离(或直接置 -inf logit)
-                    large = 1e6
-                    dist_masked = dist_for_weight.clone()
-                    dist_masked[~mask] = large
-                    weights = torch.softmax(-dist_masked / max(self.soft_resp_tau, 1e-6), dim=1)
-                else:
-                    weights = torch.softmax(-dist_for_weight / max(self.soft_resp_tau, 1e-6), dim=1)  # [B,M]
+            return trajectory_loss
 
-                # 回归损失: 每模式 L1 平均 (也可用 l1_per_t.mean(-1))
-                per_mode_traj_loss = l1_per_t.mean(-1)  # [B,M]
-                trajectory_loss = (per_mode_traj_loss * weights).sum(-1).mean()
+        loss_dict = {}
+        # ========================= 多模态监督 =========================
+        if self._config.num_mode and logging_prefix == 'train':
+            
+            first_traj_dict = predictions['first_traj']
+            refined_traj_dict = predictions['refined_traj']
 
-                # 分类软标签损失
-                if "cls_logits" in predictions:
-                    log_probs = F.log_softmax(predictions["cls_logits"], dim=-1)
-                else:
-                    log_probs = None
-
-                if log_probs is not None:
-                    cls_loss = -(weights * log_probs).sum(-1).mean()
-                    loss_dict["cls_loss"] = cls_loss * self.traj_cls_loss_weight
-                    if self.cls_entropy_weight > 0:
-                        probs = log_probs.exp()
-                        entropy = -(probs * log_probs).sum(-1).mean()
-                        # 希望保持一定熵 → 最大化熵 → 加上 -entropy 系数为负, 这里直接减去熵
-                        loss_dict["cls_entropy"] = -entropy * self.cls_entropy_weight
-            # elif self._config.num_mode and logging_prefix == 'train' and self._config.use_vocab_trajs:
-            #     tokens = features['token']
-            #     N = 19
-            #     for token in tokens:
-            #         cur_vocab_trajs_dict = vocab_trajs_dict[token]  
-            #         # 根据pdms分数，取top N
-            #         top_n_idx = cur_vocab_trajs_dict['pdm_score'].topk(N, dim=0).indices
-            #         top_n_trajs = vocab_trajs[top_n_idx]  # np (N, 40, 3)
-            #     pass
-            else:
-                # 原 hard winner-take-all 方式
-                traj_gt_dist = torch.norm(all_trajs[..., :2] - gt[:, None, :, :2], p=1, dim=-1)  # [B,M,T]
-                fde_dist = traj_gt_dist[:, :, -1]  # [B,M]
-                best_mode = torch.argmin(fde_dist, dim=-1)  # [B]
-                best_traj = all_trajs[torch.arange(B), best_mode]
-                trajectory_loss = torch.nn.functional.l1_loss(best_traj, gt)
-
-                # 分类 hard label
-                if "cls_logits" in predictions:
-                    cls_loss = torch.nn.functional.cross_entropy(predictions["cls_logits"], best_mode)
-                    loss_dict["cls_loss"] = cls_loss * self.traj_cls_loss_weight
-
-            loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
+            first_traj_loss = get_traj_loss(first_traj_dict, targets)
+            refined_traj_loss = get_traj_loss(refined_traj_dict, targets)
+            loss_dict["first_traj_loss"] = first_traj_loss * self.traj_loss_weight
+            loss_dict["refined_traj_loss"] = refined_traj_loss * self.traj_loss_weight
 
             ## 控制命令预测loss
             if "cmd_logits" in predictions:
@@ -532,23 +517,14 @@ class W4DModel(nn.Module):
                 cmd_loss = torch.nn.functional.cross_entropy(predictions["cmd_logits"], cmd)
                 loss_dict["cmd_loss"] = cmd_loss * self._config.traj_cmd_loss_weight
 
-            # 多样性损失（终点排斥）—— 与软/硬责任无关
-            if self.diversity_loss_weight > 0:
-                endpoints = all_trajs[..., -1, :2]  # [B,M,2]
-                pair_dist = torch.cdist(endpoints, endpoints)  # [B,M,M]
-                m = pair_dist.shape[1]
-                diag_mask = 1 - torch.eye(m, device=pair_dist.device)
-                penalty = F.relu(self.diversity_margin - pair_dist) * diag_mask
-                tri_mask = torch.triu(torch.ones_like(penalty), diagonal=1)
-                penalty = penalty * tri_mask
-                num_pairs = m * (m - 1) / 2
-                diversity_loss = penalty.sum() / (B * num_pairs + 1e-6)
-                loss_dict["diversity_loss"] = diversity_loss * self.diversity_loss_weight
         else:
-            # 单模态或非训练阶段
-            if "trajectory" in predictions:
-                trajectory_loss = torch.nn.functional.l1_loss(predictions["trajectory"], targets["trajectory"])
-                loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
+            first_traj_dict = predictions['first_traj']
+            refined_traj_dict = predictions['refined_traj']
+
+            first_traj_loss = get_traj_loss(first_traj_dict, targets)
+            refined_traj_loss = get_traj_loss(refined_traj_dict, targets)
+            loss_dict["first_traj_loss"] = first_traj_loss * self.traj_loss_weight
+            loss_dict["refined_traj_loss"] = refined_traj_loss * self.traj_loss_weight
 
         # 世界模型损失
         if 'wm_next_latent' in predictions:

@@ -59,17 +59,18 @@ class W4DModel(nn.Module):
             requires_grad=True,
         )  # [1, 3, 256, 1024] 表示对应 3 个视角的可学习 vision query
         
-        # define transformer decoder for vision query
-        self.vision_decoder_layer = nn.TransformerDecoderLayer(
-            d_model=config.tf_d_model,
-            nhead=config.tf_num_head,
-            dim_feedforward=config.tf_d_ffn,
-            dropout=config.tf_dropout,
-            batch_first=True,
-        )
-        
+        # define transformer decoder for vision query        
         self.vision_decoder = nn.ModuleList(
-            nn.TransformerDecoder(self.vision_decoder_layer, num_layers=1) for _ in range(3)
+            nn.TransformerDecoder(
+                nn.TransformerDecoderLayer(
+                    d_model=config.tf_d_model,
+                    nhead=config.tf_num_head,
+                    dim_feedforward=config.tf_d_ffn,
+                    dropout=config.tf_dropout,
+                    batch_first=True,
+                ),
+                num_layers=1
+            ) for _ in range(3)
         )
 
         # self.image_fc = nn.Linear(512, 256)
@@ -210,6 +211,7 @@ class W4DModel(nn.Module):
                 batch_first=True,
             )
             self._wm_decoder = nn.TransformerDecoder(wm_decoder_layer, config.tf_num_layers) # input: Bz, num_token, d_model
+            
     def gen_sineembed_for_position(self, pos_tensor, hidden_dim=256):
         """Mostly copy-paste from https://github.com/IDEA-opensource/DAB-DETR/
         """

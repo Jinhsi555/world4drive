@@ -77,5 +77,5 @@ if __name__ == "__main__":
     #     print("示例: python read_gz_files_simple.py /path/to/directory")
     #     sys.exit(1)
     
-    target_directory = "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_cache/2021.05.12.19.36.12_veh-35_00005_00204/0a678d2136b35b56"
+    target_directory = "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_feature_cache_test/2021.05.25.14.16.10_veh-35_00083_00485"
     find_and_read_gz_files_simple(target_directory)

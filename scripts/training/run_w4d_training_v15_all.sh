@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query
+experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_wm_refine
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -32,10 +32,11 @@ torchrun \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/dino_feature_cache \
-    agent.config.model_version=15 \
+    agent.config.model_version='refine' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
+    agent.config.use_wm=True \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14

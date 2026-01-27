@@ -14,10 +14,10 @@ SYNTHETIC_SENSOR_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/sensor_blobs
 SYNTHETIC_SCENES_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/synthetic_scene_pickles
 split=navtest
 agent=transfuser_agent
-dir=training_w4d_agent_4mode_navtrain_v15_dino/navtest_eval_one_stage_train_all
+dir=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_use_better_wm/navtest_eval_one_stage_train_all
 metric_cache_path="${NAVSIM_EXP_ROOT}/metric_cache"
 cd ${NAVSIM_DEVKIT_ROOT}
-ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_v15_dino/2026.01.19.20.22.30/lightning_logs/version_0/checkpoints
+ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_use_better_wm/2026.01.26.10.59.15/lightning_logs/version_0/checkpoints
 
 # 并行相关配置 (可通过环境变量覆盖)
 GPU_IDS=${GPU_IDS:-"0,1,2,3,4,5,6,7"}   # 逗号分隔 GPU id 列表
@@ -146,12 +146,12 @@ launch_eval() {
           +trainer.params.devices=1 \
           trainer.params.num_nodes=1 \
           experiment_name=${experiment_name} \
-          cache_path="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_info_training_cache_debug" \
+          cache_path="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/dino_feature_cache_test" \
           metric_cache_path=${metric_cache_path} \
           train_test_split=${split} \
           agent.config.model_version=15 \
           agent.config.num_mode=4 \
-          agent.config.use_wm=False \
+          agent.config.use_wm=True \
           agent.config.use_cmd_embed=False \
           traffic_agents=non_reactive \
           worker.threads_per_node=14

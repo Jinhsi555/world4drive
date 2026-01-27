@@ -78,7 +78,7 @@ class W4DModel(nn.Module):
         self._num_poses = config.trajectory_sampling.num_poses
         #TODO: petr position_embedding
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 20*12 + 1
-        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 768+1
+        num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 256*1 + 1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 256+1
         # num_keyval = config.num_keyval if hasattr(config, 'num_keyval') else 120+1
 
@@ -249,12 +249,13 @@ class W4DModel(nn.Module):
         # v2: use learnable query do cross attention with each view dino feature
         init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 256, 1024] -> [bs, 3, 256, 1024]
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 256, 1024]
-        for i in range(3):
+        for i in range(1, 2):
             vision_query = init_view_query_feat[:, i]  # [bs, 256, 1024]
             camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
             
-        spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
+        # spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
+        spatial_view_feat = spatial_view_feat[:, i]  # [b, 256, 1024]
 
         # =============================== keyval trans =======================================
         status_encoding = self._status_encoding(status_feature)  # [bs, 256]
@@ -325,7 +326,7 @@ class W4DModel(nn.Module):
             wm_keyval = torch.cat([ego_query_out, keyval_final], dim=1)
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
             wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
-            trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, n, seq_len-1, dim)
+            trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, 1, seq_len-1, dim)
             
         return trajectory
 
@@ -352,12 +353,13 @@ class W4DModel(nn.Module):
         # v2: use learnable query do cross attention with each view dino feature
         init_view_query_feat = self.vision_query.repeat(batch_size, 1, 1, 1)  # [1, 3, 256, 1024] -> [bs, 3, 256, 1024]
         spatial_view_feat = torch.zeros_like(init_view_query_feat)  # [1, 3, 256, 1024]
-        for i in range(3):
+        for i in range(1, 2):
             vision_query = init_view_query_feat[:, i]  # [bs, 256, 1024]
             camera_kv = camera_feature[:, i, 1:]  # [bs, seq_len, dim]
             spatial_view_feat[:, i] = self.vision_decoder[i](vision_query, camera_kv)
             
-        spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
+        # spatial_view_feat = spatial_view_feat.reshape(b, -1, dim)  # [b, 768, 1024]
+        spatial_view_feat = spatial_view_feat[:, i]  # [b, 256, 1024]
 
         # =============================== keyval trans =======================================
         status_encoding = self._status_encoding(status_feature)  # [bs, 256]
@@ -441,7 +443,7 @@ class W4DModel(nn.Module):
             wm_keyval = torch.cat([ego_query_out, keyval_final], dim=1)
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1)
             wm_next_latent = self._wm_decoder(wm_query, wm_keyval)
-            trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, n, seq_len-1, dim)
+            trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, 1, seq_len-1, dim)
             return trajectory
         else:
             return trajectory

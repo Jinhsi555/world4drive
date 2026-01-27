@@ -43,30 +43,14 @@ class AgentLightningModule(pl.LightningModule):
             prediction = self.agent.forward_train(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
         elif logging_prefix=='train' and self._cfg.use_wm:
-            # 间隔2 frame
-            prev_features = {}
-            prev_features['camera_feature'] = features['camera_feature_prev_3']
-            prev_features['status_feature'] = features['status_feature_prev_3']
-
-            prev_targets = {}
-            prev_targets['trajectory'] = targets['trajectory_prev_3']
-
-            self.agent._transfuser_model.prev_keyval_feat = None
-            prev_prediction = self.agent.forward_train(prev_features)
-
             prediction = self.agent.forward_train(features)
 
-            prev_prediction['next_latent'] = prediction['cur_latent']
-
-            prev_loss = self.agent.compute_loss(prev_features, prev_targets, prev_prediction, logging_prefix=logging_prefix)
+            prediction['next_latent'] = features['camera_feature_next_8'][:, :, 1:, :]
 
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
-            
-            # 为prev_loss中的损失项添加前缀prev_
-            prev_loss = {f'prev_{k}': v for k, v in prev_loss.items()}
 
             # 合并两个损失字典
-            loss = {**prev_loss, **cur_loss}
+            loss = {**cur_loss}
 
 
         elif logging_prefix=='val' and not self._cfg.use_wm:
@@ -74,15 +58,9 @@ class AgentLightningModule(pl.LightningModule):
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
 
         elif logging_prefix=='val' and self._cfg.use_wm:
-            # 间隔2 frame
-            prev_features = {}
-            prev_features['camera_feature'] = features['camera_feature_prev_3']
-            prev_features['status_feature'] = features['status_feature_prev_3']
-
-            self.agent._transfuser_model.prev_keyval_feat = None
-            prev_prediction = self.agent.forward_test(prev_features)
 
             prediction = self.agent.forward_test(features)
+            prediction['next_latent'] = features['camera_feature_next_8'][:, :, 1:, :]
 
             # prediction = self.agent.forward_test(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
