@@ -45,7 +45,22 @@ class AgentLightningModule(pl.LightningModule):
         elif logging_prefix=='train' and self._cfg.use_wm:
             prediction = self.agent.forward_train(features)
 
-            prediction['next_latent'] = features['camera_feature_next_8'][:, :, 1:, :]
+            prediction['next_latent'] = torch.stack(
+                [
+                    features['camera_feature_prev_3'],
+                    features['camera_feature_prev_2'],
+                    features['camera_feature_prev_1'],
+                    features['camera_feature'],
+                    features['camera_feature_next_1'],
+                    features['camera_feature_next_2'],
+                    features['camera_feature_next_3'],
+                    features['camera_feature_next_4'],
+                    features['camera_feature_next_5'],
+                    features['camera_feature_next_6'],
+                    features['camera_feature_next_7'],
+                    features['camera_feature_next_8'],
+                ], dim=1
+            )[:, 1:, :, 1:, ...]
 
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
 
@@ -60,7 +75,22 @@ class AgentLightningModule(pl.LightningModule):
         elif logging_prefix=='val' and self._cfg.use_wm:
 
             prediction = self.agent.forward_test(features)
-            prediction['next_latent'] = features['camera_feature_next_8'][:, :, 1:, :]
+            prediction['next_latent'] = prediction['next_latent'] = torch.stack(
+                [
+                    features['camera_feature_prev_3'],
+                    features['camera_feature_prev_2'],
+                    features['camera_feature_prev_1'],
+                    features['camera_feature'],
+                    features['camera_feature_next_1'],
+                    features['camera_feature_next_2'],
+                    features['camera_feature_next_3'],
+                    features['camera_feature_next_4'],
+                    features['camera_feature_next_5'],
+                    features['camera_feature_next_6'],
+                    features['camera_feature_next_7'],
+                    features['camera_feature_next_8'],
+                ], dim=1
+            )[:, 1:, :, 1:, ...]
 
             # prediction = self.agent.forward_test(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
@@ -181,16 +211,15 @@ class AgentLightningModule(pl.LightningModule):
         features, _ = batch
         with torch.no_grad():
             if self._cfg.model_name == "W4D":
-                if self._cfg.use_wm:
-                    prev_features = {}
-                    prev_features['camera_feature'] = features['camera_feature_prev_3']
-                    prev_features['status_feature'] = features['status_feature_prev_3']
-
-                    self.agent._transfuser_model.prev_keyval_feat = None
-                    prev_prediction = self.agent.forward_test(prev_features)
-
+                if self._cfg.use_wm and self._cfg.avg_mode:
+                    outputs = self.agent.forward_test(features)
+                    first_prediction = outputs['first_traj']
+                    refined_prediction = outputs['refined_traj']
+                    prediction = {}
+                    for key in ['trajectory', 'cls_logits', 'all_trajectories']:
+                        prediction[key] = (first_prediction[key] + refined_prediction[key]) / 2
+                elif self._cfg.use_wm:
                     prediction = self.agent.forward_test(features)
-                    
                 else:
                     prediction = self.agent.forward_test(features)
 

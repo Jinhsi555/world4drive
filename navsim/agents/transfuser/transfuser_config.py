@@ -123,7 +123,9 @@ class TransfuserConfig:
     use_fde_for_weights: bool = True
 
     ## world4drive config
+    num_frames: int = 12
     num_mode: int = 18
+    num_views: int = 3
     traj_loss_weight: float = 1.0
     traj_cls_loss_weight: float = 0.2
     diversity_loss_weight: float = 0.0
@@ -131,6 +133,7 @@ class TransfuserConfig:
     traj_cmd_loss_weight: float = 0.5
     use_cmd_embed: bool = True
     use_wm: bool = True
+    avg_mode:bool = False
     wm_loss_weight: float = 0.2
     use_ar: bool = False
     use_ar_wm: bool = False

@@ -26,7 +26,9 @@ config:
   use_fde_for_weights: true
 
   ## world4drive config
+  num_frames: 12
   num_mode: 4
+  num_views: 3
   traj_loss_weight: 1.0
   traj_cls_loss_weight: 0.0
   diversity_loss_weight: 0.0
@@ -40,6 +42,12 @@ config:
   action_chunk_size : 4
   ar_wm_replace_prob: 0.1
   _use_mlp_ensemble: false
+
+  tf_d_model: 1024
+  tf_d_ffn: 1024
+  tf_num_layers: 3
+  tf_num_head: 8
+  tf_dropout: 0.0
 
   #epona config
   # closed_traj_evaluation: false
