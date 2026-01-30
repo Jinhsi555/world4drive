@@ -48,16 +48,16 @@ class AgentLightningModule(pl.LightningModule):
             prediction['next_latent'] = torch.stack(
                 [
                     features['camera_feature_prev_3'],
-                    features['camera_feature_prev_2'],
-                    features['camera_feature_prev_1'],
+                    # features['camera_feature_prev_2'],
+                    # features['camera_feature_prev_1'],
                     features['camera_feature'],
-                    features['camera_feature_next_1'],
-                    features['camera_feature_next_2'],
-                    features['camera_feature_next_3'],
+                    # features['camera_feature_next_1'],
+                    # features['camera_feature_next_2'],
+                    # features['camera_feature_next_3'],
                     features['camera_feature_next_4'],
-                    features['camera_feature_next_5'],
-                    features['camera_feature_next_6'],
-                    features['camera_feature_next_7'],
+                    # features['camera_feature_next_5'],
+                    # features['camera_feature_next_6'],
+                    # features['camera_feature_next_7'],
                     features['camera_feature_next_8'],
                 ], dim=1
             )[:, 1:, :, 1:, ...]
@@ -78,16 +78,16 @@ class AgentLightningModule(pl.LightningModule):
             prediction['next_latent'] = prediction['next_latent'] = torch.stack(
                 [
                     features['camera_feature_prev_3'],
-                    features['camera_feature_prev_2'],
-                    features['camera_feature_prev_1'],
+                    # features['camera_feature_prev_2'],
+                    # features['camera_feature_prev_1'],
                     features['camera_feature'],
-                    features['camera_feature_next_1'],
-                    features['camera_feature_next_2'],
-                    features['camera_feature_next_3'],
+                    # features['camera_feature_next_1'],
+                    # features['camera_feature_next_2'],
+                    # features['camera_feature_next_3'],
                     features['camera_feature_next_4'],
-                    features['camera_feature_next_5'],
-                    features['camera_feature_next_6'],
-                    features['camera_feature_next_7'],
+                    # features['camera_feature_next_5'],
+                    # features['camera_feature_next_6'],
+                    # features['camera_feature_next_7'],
                     features['camera_feature_next_8'],
                 ], dim=1
             )[:, 1:, :, 1:, ...]

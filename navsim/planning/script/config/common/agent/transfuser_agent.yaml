@@ -36,7 +36,7 @@ config:
   traj_cmd_loss_weight: 0.2
   use_cmd_embed: true
   use_wm: false
-  wm_loss_weight: 0.1
+  wm_loss_weight: 0.5
   use_ar: false
   use_ar_wm: false
   action_chunk_size : 4

@@ -106,6 +106,8 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_v15_refine import W4DModel
         elif self._config.model_version == 'refine_temporal':
             from navsim.agents.transfuser.w4d_model_v15_refine_temporal_wm import W4DModel
+        elif self._config.model_version == 'refine_temporal_short_step':
+            from navsim.agents.transfuser.w4d_model_v15_refine_temporal_wm_short_step import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)

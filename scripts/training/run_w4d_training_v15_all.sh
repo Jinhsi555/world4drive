@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_refine_temporal_wm_bs256
+experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_refine_temporal_wm_bs512
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -25,18 +25,21 @@ torchrun \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
     --config-name ${config} \
     agent=transfuser_agent \
-    dataloader.params.batch_size=8 \
+    dataloader.params.batch_size=16 \
     dataloader.params.num_workers=12 \
     experiment_name=$experiment_name \
     train_test_split=$TRAIN_TEST_SPLIT \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/dino_feature_cache \
-    agent.config.model_version='refine_temporal' \
+    agent.config.model_version='refine_temporal_short_step' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
+    agent.config.num_frames=4 \
+    agent.config.wm_loss_weight=0.6 \
+    agent.lr=1.5e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \

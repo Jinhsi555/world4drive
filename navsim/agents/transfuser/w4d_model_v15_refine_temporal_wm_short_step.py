@@ -190,7 +190,7 @@ class W4DModel(nn.Module):
 
 
         # loss weight
-        self.wm_loss_weight = config.wm_loss_weight
+        self.wm_loss_weight = 0.2
         self.traj_loss_weight= config.traj_loss_weight if hasattr(config, 'traj_loss_weight') else 1.0
         self.traj_cls_loss_weight= config.traj_cls_loss_weight if hasattr(config, 'traj_cls_loss_weight') else 0.5
         # 多样性损失权重与阈值（终点距离<margin即惩罚）
@@ -212,7 +212,7 @@ class W4DModel(nn.Module):
         self.use_all_mb = config.use_all_mb if hasattr(config, 'use_all_mb') else False
 
         if self.use_wm:
-            num_wm_query = 11 * (num_keyval - 1)
+            num_wm_query = (self._config.num_frames-1) * (num_keyval - 1)
             self._wm_query_embedding = nn.Embedding(num_wm_query, config.tf_d_model)
             self.temporal_world_model = TemporalWorldModel(config, use_4d_rope=True)
 
@@ -222,16 +222,16 @@ class W4DModel(nn.Module):
         all_frames_camera_feature = torch.stack(
             [
                 features['camera_feature_prev_3'],
-                features['camera_feature_prev_2'],
-                features['camera_feature_prev_1'],
+                # features['camera_feature_prev_2'],
+                # features['camera_feature_prev_1'],
                 features['camera_feature'],
-                features['camera_feature_next_1'],
-                features['camera_feature_next_2'],
-                features['camera_feature_next_3'],
+                # features['camera_feature_next_1'],
+                # features['camera_feature_next_2'],
+                # features['camera_feature_next_3'],
                 features['camera_feature_next_4'],
-                features['camera_feature_next_5'],
-                features['camera_feature_next_6'],
-                features['camera_feature_next_7'],
+                # features['camera_feature_next_5'],
+                # features['camera_feature_next_6'],
+                # features['camera_feature_next_7'],
                 features['camera_feature_next_8'],
             ], dim=1
         )
@@ -241,21 +241,21 @@ class W4DModel(nn.Module):
         all_frames_status_feature = torch.stack(
             [
                 features['status_feature_prev_3'],
-                features['status_feature_prev_2'],
-                features['status_feature_prev_1'],
+                # features['status_feature_prev_2'],
+                # features['status_feature_prev_1'],
                 status_feature,
-                features['status_feature_next_1'],
-                features['status_feature_next_2'],
-                features['status_feature_next_3'],
+                # features['status_feature_next_1'],
+                # features['status_feature_next_2'],
+                # features['status_feature_next_3'],
                 features['status_feature_next_4'],
-                features['status_feature_next_5'],
-                features['status_feature_next_6'],
-                features['status_feature_next_7'],
+                # features['status_feature_next_5'],
+                # features['status_feature_next_6'],
+                # features['status_feature_next_7'],
                 features['status_feature_next_8'],
             ], dim=1
         )
 
-        cmd = all_frames_status_feature[..., :4]  # [bs, num_frames, 4] one-hot
+        cmd = all_frames_status_feature[..., :2]  # [bs, num_frames, 4] one-hot
         cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
 
 
@@ -344,15 +344,15 @@ class W4DModel(nn.Module):
         # wm
         if self.use_wm:
             trajectory = {}
-            trajectory['first_traj'] = self._trajectory_head(ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...], cmd=cmd[:, 3])
+            trajectory['first_traj'] = self._trajectory_head(ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...], cmd=cmd[:, 1])
 
-            trajectory['cmd_logits'] = cmd_logits.reshape(batch_size, num_frames, -1)[:, 3, ...].squeeze(1)
-            trajectory['cmd_pred'] = cmd_pred.reshape(batch_size, num_frames)[:, 3]
-            trajectory['cmd_gt'] = cmd.reshape(batch_size, num_frames)[:, 3]
+            trajectory['cmd_logits'] = cmd_logits.reshape(batch_size, num_frames, -1)[:, 1, ...].squeeze(1)
+            trajectory['cmd_pred'] = cmd_pred.reshape(batch_size, num_frames)[:, 1]
+            trajectory['cmd_gt'] = cmd.reshape(batch_size, num_frames)[:, 1]
             
-            wm_keyval = spatial_view_feat[:, :4, ...]
+            wm_keyval = spatial_view_feat[:, :2, ...]
             # auto-regressive from frame-5 to frame-12 (8 frames)
-            for current_frame in range(4, 12):
+            for current_frame in range(2, num_frames):
                 n_tokens_4d = current_frame * self._config.num_views * 16 * 16
                 attention_mask = self.temporal_world_model.get_attention_mask(n_tokens_4d, self._config.num_views * 16 * 16).to(device)
                 current_keyval = wm_keyval[:, :current_frame, ...].reshape(batch_size, -1, dim)
@@ -374,12 +374,12 @@ class W4DModel(nn.Module):
             trajectory['wm_next_latent']=wm_next_latent
             
             # refine
-            refine_query = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...]
+            refine_query = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...]
             refine_keyval = wm_next_latent.reshape(batch_size, num_frames-1, -1, dim)[:, -1, ...]
-            refine_query_out = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...] + self.refine_block(refine_query, refine_keyval)
+            refine_query_out = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...] + self.refine_block(refine_query, refine_keyval)
             
             # TODO: comupute the refined trajectory with residual
-            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 3])
+            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 1])
             for key in trajectory['first_traj']:
                 trajectory['refined_traj'][key] += trajectory['first_traj'][key]
         return trajectory
@@ -390,41 +390,41 @@ class W4DModel(nn.Module):
         all_frames_camera_feature = torch.stack(
             [
                 features['camera_feature_prev_3'],
-                features['camera_feature_prev_2'],
-                features['camera_feature_prev_1'],
+                # features['camera_feature_prev_2'],
+                # features['camera_feature_prev_1'],
                 features['camera_feature'],
-                features['camera_feature_next_1'],
-                features['camera_feature_next_2'],
-                features['camera_feature_next_3'],
+                # features['camera_feature_next_1'],
+                # features['camera_feature_next_2'],
+                # features['camera_feature_next_3'],
                 features['camera_feature_next_4'],
-                features['camera_feature_next_5'],
-                features['camera_feature_next_6'],
-                features['camera_feature_next_7'],
+                # features['camera_feature_next_5'],
+                # features['camera_feature_next_6'],
+                # features['camera_feature_next_7'],
                 features['camera_feature_next_8'],
             ], dim=1
         )
-        b, n, seq_len, dim = camera_feature.shape
+        b, n, seq_len, dim = camera_feature.shape  # [bs, num_frames, 257, 1024]
         dim = self._config.tf_d_model
 
         status_feature = features['status_feature']
         all_frames_status_feature = torch.stack(
             [
                 features['status_feature_prev_3'],
-                features['status_feature_prev_2'],
-                features['status_feature_prev_1'],
+                # features['status_feature_prev_2'],
+                # features['status_feature_prev_1'],
                 status_feature,
-                features['status_feature_next_1'],
-                features['status_feature_next_2'],
-                features['status_feature_next_3'],
+                # features['status_feature_next_1'],
+                # features['status_feature_next_2'],
+                # features['status_feature_next_3'],
                 features['status_feature_next_4'],
-                features['status_feature_next_5'],
-                features['status_feature_next_6'],
-                features['status_feature_next_7'],
+                # features['status_feature_next_5'],
+                # features['status_feature_next_6'],
+                # features['status_feature_next_7'],
                 features['status_feature_next_8'],
             ], dim=1
         )
 
-        cmd = all_frames_status_feature[..., :4]  # [bs, num_frames, 4] one-hot
+        cmd = all_frames_status_feature[..., :2]  # [bs, num_frames, 4] one-hot
         cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
 
 
@@ -513,11 +513,11 @@ class W4DModel(nn.Module):
         # wm
         if self.use_wm:
             trajectory = {}
-            trajectory['first_traj'] = self._trajectory_head(ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...], cmd=cmd[:, 3])
+            trajectory['first_traj'] = self._trajectory_head(ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 2, ...], cmd=cmd[:, 2])
 
-            trajectory['cmd_logits'] = cmd_logits.reshape(batch_size, num_frames, -1)[:, 3, ...].squeeze(1)
-            trajectory['cmd_pred'] = cmd_pred.reshape(batch_size, num_frames)[:, 3]
-            trajectory['cmd_gt'] = cmd.reshape(batch_size, num_frames)[:, 3]
+            trajectory['cmd_logits'] = cmd_logits.reshape(batch_size, num_frames, -1)[:, 2, ...].squeeze(1)
+            trajectory['cmd_pred'] = cmd_pred.reshape(batch_size, num_frames)[:, 2]
+            trajectory['cmd_gt'] = cmd.reshape(batch_size, num_frames)[:, 2]
 
             wm_keyval = spatial_view_feat[:, :-1, ...].reshape(batch_size, -1, dim)
             wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1).reshape(batch_size, -1, dim)
@@ -537,12 +537,12 @@ class W4DModel(nn.Module):
             trajectory['wm_next_latent']=wm_next_latent.reshape(batch_size, num_frames-1, self._config.num_views, -1, dim)
             
             # refine
-            refine_query = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...]
+            refine_query = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...]
             refine_keyval = wm_next_latent.reshape(batch_size, num_frames-1, -1, dim)[:, -1, ...]
-            refine_query_out = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 3, ...] + self.refine_block(refine_query, refine_keyval)
+            refine_query_out = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...] + self.refine_block(refine_query, refine_keyval)
             
             # TODO: comupute the refined trajectory with residual
-            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 3])
+            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 1])
             for key in trajectory['first_traj']:
                 trajectory['refined_traj'][key] += trajectory['first_traj'][key]
         return trajectory
