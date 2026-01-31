@@ -527,45 +527,46 @@ class TransfuserAgent(AbstractAgent):
         """Inherited, see superclass."""
         # return torch.optim.Adam(self._transfuser_model.parameters(), lr=self._lr)
         if self._config.training_mode == 'sl':
-            # 使用线性预热 + 余弦退火学习率调度
-            optimizer = torch.optim.Adam(self._transfuser_model.parameters(), lr=self._lr)
+            return torch.optim.Adam(self._transfuser_model.parameters(), lr=self._lr)
+            # # 使用线性预热 + 余弦退火学习率调度
+            # optimizer = torch.optim.Adam(self._transfuser_model.parameters(), lr=self._lr)
             
-            # 读取最大训练步数
-            max_step = self.trainer.estimated_stepping_batches
+            # # 读取最大训练步数
+            # max_step = self.trainer.estimated_stepping_batches
             
-            # 预热步数：前10%的训练步数用于预热
-            warmup_steps = int(0.1 * max_step)
-            cosine_steps = max_step - warmup_steps
+            # # 预热步数：前10%的训练步数用于预热
+            # warmup_steps = int(0.1 * max_step)
+            # cosine_steps = max_step - warmup_steps
             
-            # 线性预热调度器：从0线性增加到初始学习率
-            warmup_scheduler = LinearLR(
-                optimizer=optimizer,
-                start_factor=0.01,  # 从初始学习率的1%开始
-                end_factor=1.0,     # 预热结束时达到完整学习率
-                total_iters=warmup_steps
-            )
+            # # 线性预热调度器：从0线性增加到初始学习率
+            # warmup_scheduler = LinearLR(
+            #     optimizer=optimizer,
+            #     start_factor=0.01,  # 从初始学习率的1%开始
+            #     end_factor=1.0,     # 预热结束时达到完整学习率
+            #     total_iters=warmup_steps
+            # )
             
-            # 余弦退火学习率调度器
-            cosine_scheduler = CosineAnnealingLR(
-                optimizer=optimizer,
-                T_max=cosine_steps,
-                eta_min=1e-6,  # 最小学习率
-            )
+            # # 余弦退火学习率调度器
+            # cosine_scheduler = CosineAnnealingLR(
+            #     optimizer=optimizer,
+            #     T_max=cosine_steps,
+            #     eta_min=1e-6,  # 最小学习率
+            # )
             
-            # 组合预热和余弦退火
-            scheduler = SequentialLR(
-                optimizer=optimizer,
-                schedulers=[warmup_scheduler, cosine_scheduler],
-                milestones=[warmup_steps]  # 在warmup_steps步之后切换到余弦退火
-            )
+            # # 组合预热和余弦退火
+            # scheduler = SequentialLR(
+            #     optimizer=optimizer,
+            #     schedulers=[warmup_scheduler, cosine_scheduler],
+            #     milestones=[warmup_steps]  # 在warmup_steps步之后切换到余弦退火
+            # )
             
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": scheduler,
-                    "interval": "step",  # 每步更新学习率
-                },
-            }
+            # return {
+            #     "optimizer": optimizer,
+            #     "lr_scheduler": {
+            #         "scheduler": scheduler,
+            #         "interval": "step",  # 每步更新学习率
+            #     },
+            # }
         elif self._config.training_mode == 'ft':
             ### 使用定制学习率策略
             param_groups: List[Dict[str, Any]] = []

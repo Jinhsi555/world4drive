@@ -38,8 +38,8 @@ torchrun \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
     agent.config.num_frames=4 \
-    agent.config.wm_loss_weight=0.6 \
-    agent.lr=1e-4 \
+    agent.config.wm_loss_weight=0.5 \
+    agent.lr=8e-5 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \

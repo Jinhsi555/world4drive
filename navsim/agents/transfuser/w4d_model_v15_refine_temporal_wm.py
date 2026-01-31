@@ -380,8 +380,6 @@ class W4DModel(nn.Module):
             
             # TODO: comupute the refined trajectory with residual
             trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 3])
-            for key in trajectory['first_traj']:
-                trajectory['refined_traj'][key] += trajectory['first_traj'][key]
         return trajectory
 
     def forward_train(self, features) -> Dict[str, torch.Tensor]:
@@ -543,8 +541,6 @@ class W4DModel(nn.Module):
             
             # TODO: comupute the refined trajectory with residual
             trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 3])
-            for key in trajectory['first_traj']:
-                trajectory['refined_traj'][key] += trajectory['first_traj'][key]
         return trajectory
     
     # the loss function for world model
