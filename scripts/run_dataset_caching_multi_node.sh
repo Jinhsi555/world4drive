@@ -15,12 +15,12 @@ torchrun \
     --master_port=$MLP_WORKER_0_PORT \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_dataset_caching_multi_node.py \
     agent=transfuser_agent \
-    agent.config.model_version=15 \
+    agent.config.model_version='refine_temporal_short_step' \
     agent.config.num_mode=4 \
     agent.config.use_cmd_embed=False \
     agent.config.cache_mode=True \
     experiment_name=transfuser_cache_for_training \
-    cache_path=$NAVSIM_EXP_ROOT/dino_feature_cache \
+    cache_path=$NAVSIM_EXP_ROOT/geometry_feature_cache_navtrain \
     train_test_split=$TRAIN_TEST_SPLIT \
     worker.threads_per_node=14
     # worker=sequential \

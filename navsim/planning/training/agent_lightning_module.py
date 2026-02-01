@@ -211,15 +211,17 @@ class AgentLightningModule(pl.LightningModule):
         features, _ = batch
         with torch.no_grad():
             if self._cfg.model_name == "W4D":
-                if self._cfg.use_wm and self._cfg.avg_mode:
+                if self._cfg.use_wm and self._cfg.traj_mode == 'avg':
                     outputs = self.agent.forward_test(features)
                     first_prediction = outputs['first_traj']
                     refined_prediction = outputs['refined_traj']
                     prediction = {}
                     for key in ['trajectory', 'cls_logits', 'all_trajectories']:
                         prediction[key] = (first_prediction[key] + refined_prediction[key]) / 2
-                elif self._cfg.use_wm:
-                    prediction = self.agent.forward_test(features)
+                elif self._cfg.use_wm and self._cfg.traj_mode == 'first':
+                    prediction = self.agent.forward_test(features)['first_traj']
+                elif self._cfg.use_wm and self._cfg.traj_mode == 'refine':
+                    prediction = self.agent.forward_test(features)['refined_traj']
                 else:
                     prediction = self.agent.forward_test(features)
 

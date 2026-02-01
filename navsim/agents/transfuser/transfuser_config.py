@@ -133,7 +133,7 @@ class TransfuserConfig:
     traj_cmd_loss_weight: float = 0.5
     use_cmd_embed: bool = True
     use_wm: bool = True
-    avg_mode:bool = False
+    traj_mode:bool = 'first'
     wm_loss_weight: float = 0.2
     use_ar: bool = False
     use_ar_wm: bool = False

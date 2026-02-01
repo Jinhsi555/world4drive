@@ -1,3 +1,7 @@
 {
-    "python.languageServer": "None"
+    "python.analysis.memory": 4096,  // 设置为4GB或更高
+    "python.analysis.autoSearchPaths": false,  // 关闭自动搜索路径
+    "python.analysis.extraPaths": [],  // 明确指定额外路径
+    "python.analysis.diagnosticMode": "workspace",  // 改为workspace模式
+    "python.analysis.indexing": true  // 启用索引
 }

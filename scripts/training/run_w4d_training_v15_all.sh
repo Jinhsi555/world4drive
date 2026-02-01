@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_refine_temporal_wm_bs64_30epoch
+experiment_name=training_w4d_agent_4mode_navtrain_all_v15_dino_vision_query/3_views_refine_temporal_wm_bs512_lr5e-4_cosine
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -25,7 +25,7 @@ torchrun \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
     --config-name ${config} \
     agent=transfuser_agent \
-    dataloader.params.batch_size=8 \
+    dataloader.params.batch_size=16 \
     dataloader.params.num_workers=12 \
     experiment_name=$experiment_name \
     train_test_split=$TRAIN_TEST_SPLIT \
@@ -39,11 +39,11 @@ torchrun \
     agent.config.use_wm=True \
     agent.config.num_frames=4 \
     agent.config.wm_loss_weight=0.5 \
-    agent.lr=8e-5 \
+    agent.lr=5e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \
     trainer.params.precision='bf16-mixed' \
     trainer.params.accumulate_grad_batches=1 \
-    trainer.params.max_epochs=30 \
+    trainer.params.max_epochs=100 \
     # resume_ckpt_path="'/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_3mode_all_navtrain/2025.10.16.08.35.16/lightning_logs/version_0/checkpoints/epoch=29-step=12120.ckpt'"
