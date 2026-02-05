@@ -70,6 +70,14 @@ config:
   cache_mode: false
   is_eval: false
 
+  # Curriculum Learning 配置
+  use_curriculum_learning: True        # 是否启用课程学习
+  curriculum_start_epoch: 10             # 开始过渡的 epoch
+  curriculum_end_epoch: 30               # 完成过渡的 epoch
+  curriculum_start_step: 0               # 基于 step 的起始点（与 epoch 二选一，优先使用 step）
+  curriculum_end_step: 0                 # 基于 step 的结束点
+  curriculum_schedule: 'linear'          # 过渡策略: 'linear', 'cosine', 'step'
+
 lr: 1e-4
 checkpoint_path: null
 

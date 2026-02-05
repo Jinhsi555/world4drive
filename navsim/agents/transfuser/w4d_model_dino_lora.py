@@ -650,7 +650,180 @@ class W4DModel(nn.Module):
             # for key in trajectory['first_traj']:
             #     trajectory['refined_traj'][key] += trajectory['first_traj'][key]
         return trajectory
-    
+
+    def forward_train_curriculum(self, features, ar_ratio: float = 0.0, global_step: int = 0):
+        """
+        课程学习训练方法，支持 teacher forcing 和自回归模式的混合
+        
+        Args:
+            features: 输入特征
+            ar_ratio: 自回归比例 (0.0 = 纯 teacher forcing, 1.0 = 纯自回归)
+            global_step: 全局训练步数，用于 DDP 多卡训练时的确定性决策
+        """
+        # 基于 ar_ratio 和 global_step 做确定性决策
+        # global_step 在所有 DDP rank 上是同步的，因此确保所有 GPU 做出相同决策
+        if ar_ratio <= 0.0:
+            use_autoregressive = False
+        elif ar_ratio >= 1.0:
+            use_autoregressive = True
+        else:
+            # 使用 global_step 的哈希值生成确定性伪随机数
+            # 这样所有 GPU 在同一个 step 会做出相同的决策
+            hash_val = (global_step * 2654435761) % 10000 / 10000.0  # 使用乘法哈希得到 [0, 1)
+            use_autoregressive = hash_val < ar_ratio
+        
+        def get_dino_input_image(image_feature):
+            batch_size, num_views, height, width, channels = image_feature.shape
+            inputs = self.dino_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
+            return inputs.pixel_values.reshape(batch_size, num_views, channels, *inputs.pixel_values.shape[-2:])
+
+        all_frames_dino_input = torch.stack(
+            [
+                get_dino_input_image(features['camera_feature_prev_3']['dino_feature']),
+                get_dino_input_image(features['camera_feature']['dino_feature']),
+                get_dino_input_image(features['camera_feature_next_4']['dino_feature']),
+                get_dino_input_image(features['camera_feature_next_8']['dino_feature']),
+            ], dim=1
+        )
+
+        all_frames_status_feature = torch.stack(
+            [
+                features['status_feature_prev_3'],
+                features['status_feature'],
+                features['status_feature_next_4'],
+                features['status_feature_next_8'],
+            ], dim=1
+        )
+
+        cmd = all_frames_status_feature[..., :4]  # [bs, num_frames, 4] one-hot
+        cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
+
+        batch_size, num_frames, num_views, _, _, _ = all_frames_dino_input.shape
+        device = self.scene_embeds.device
+
+        # ==================== Dino Encoder with scene query =================
+        init_scene_query = self.scene_embeds.repeat(batch_size, 1, 1, 1, 1)
+        batch_size, num_frames, num_views, num_query_tokens, dino_dim = init_scene_query.shape
+        init_scene_query = init_scene_query.reshape(batch_size * num_frames, num_views * num_query_tokens, dino_dim)
+
+        image_scene_query = self.get_dino_features_with_scene_query(
+            self.lora_dino_encoder, 
+            all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+            init_scene_query
+        ).last_hidden_state
+
+        _, _, dim = image_scene_query.shape
+        image_scene_query = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., :self._config.num_scene_query_token, :]
+        scene_query = image_scene_query.reshape(batch_size, num_frames, -1, dim)
+        status_encoding = self._status_encoding(all_frames_status_feature)
+        keyval = torch.cat([status_encoding[:, :, None], scene_query], dim=-2)
+        keyval = keyval.clone() + self._keyval_embedding.weight[None, None, ...]
+        keyval_final = keyval
+
+        # target_dino_encoder 提取未来 dino feature 作为 gt
+        with torch.no_grad():
+            init_scene_query_detached = init_scene_query.detach()
+            gt_scene_query = self.get_dino_features_with_scene_query(
+                self.target_dino_encoder, 
+                all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+                init_scene_query_detached
+            ).last_hidden_state
+            gt_scene_query = gt_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., :self._config.num_scene_query_token, :]
+            gt_scene_query = gt_scene_query.reshape(batch_size, num_frames, -1, dim)
+            status_encoding_detached = status_encoding.detach()
+            gt_keyval = torch.cat([status_encoding_detached[:, :, None], gt_scene_query], dim=-2)
+            gt_keyval = gt_keyval.clone() + self._keyval_embedding.weight[None, None, ...]
+            gt_keyval_final = gt_keyval
+
+        # =============================== ego query trans =======================================
+        ego_query = self._query_embedding.weight[None, None, ...].repeat(batch_size, num_frames, 1, 1)
+
+        if self._config.num_mode:
+            mode_ref = self.waypoint_mode_ref.weight
+            if self._config.use_cmd_embed:
+                mode_ref = mode_ref.to(device).unsqueeze(0).unsqueeze(2).repeat(batch_size, 1, self._num_poses, 1)
+            else:
+                mode_ref = mode_ref.reshape(self._num_mode, self._num_poses, self._config.tf_d_model)
+                mode_ref = mode_ref.to(device).unsqueeze(0).unsqueeze(1).repeat(batch_size, num_frames, 1, 1, 1)
+
+            mode_ref_feat = self._mode_embedding(mode_ref)
+            ego_query = ego_query.clone() + mode_ref_feat.reshape(batch_size, num_frames, -1, mode_ref_feat.shape[-1]).clone()
+
+        ego_query_out = self._tf_decoder(
+            ego_query.reshape(-1, *ego_query.shape[-2:]),
+            keyval_final.reshape(-1, *keyval_final.shape[-2:])
+        )
+
+        cmd_query = self._cmd_pred_query.weight[None, None, ...].repeat(batch_size, num_frames, 1, 1)
+        cmd_query_out = self._cmd_head_decoder(
+            cmd_query.reshape(-1, *cmd_query.shape[-2:]),
+            keyval_final.reshape(-1, *keyval_final.shape[-2:])
+        )
+        cmd_logits = self._cmd_mlp(cmd_query_out).squeeze(1)
+        cmd_pred = torch.argmax(cmd_logits, dim=-1)
+
+        # wm - 基于 ar_ratio 选择不同的训练模式
+        if self.use_wm:
+            trajectory = {}
+            trajectory['first_traj'] = self._trajectory_head(ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...], cmd=cmd[:, 1])
+            trajectory['cmd_logits'] = cmd_logits.reshape(batch_size, num_frames, -1)[:, 1, ...].squeeze(1)
+            trajectory['cmd_pred'] = cmd_pred.reshape(batch_size, num_frames)[:, 1]
+            trajectory['cmd_gt'] = cmd.reshape(batch_size, num_frames)[:, 1]
+
+            if not use_autoregressive:
+                # ========== Teacher Forcing 模式 (forward_train 原始逻辑) ==========
+                wm_keyval = keyval_final[:, :-1, ...].reshape(batch_size, -1, dim)
+                wm_query = self._wm_query_embedding.weight[None, ...].repeat(batch_size, 1, 1).reshape(batch_size, -1, dim)
+
+                n_tokens_3d = (num_frames-1)*(self._config.num_views*self._config.num_scene_query_token+1)
+                attention_mask = self.temporal_world_model.get_attention_mask(n_tokens_3d, (self._config.num_views*self._config.num_scene_query_token+1)).to(device)
+                wm_next_latent = self.temporal_world_model.forward(
+                    query=wm_query,
+                    keyval=wm_keyval,
+                    time_frames=num_frames-1,
+                    height=self._config.num_views,
+                    width=self._config.num_scene_query_token,
+                    tgt_mask=attention_mask,
+                    memory_mask=attention_mask
+                )
+                trajectory['wm_next_latent'] = wm_next_latent.reshape(batch_size, num_frames-1, -1, dim)
+            else:
+                # ========== 自回归模式 (forward_test 逻辑) ==========
+                wm_keyval = keyval_final[:, :2, ...].reshape(batch_size, -1, dim)
+                
+                # auto-regressive from frame-2 to frame-(num_frames-1)
+                for current_frame in range(2, num_frames):
+                    n_tokens_3d = current_frame*(self._config.num_views*self._config.num_scene_query_token+1)
+                    attention_mask = self.temporal_world_model.get_attention_mask(n_tokens_3d, (self._config.num_views*self._config.num_scene_query_token+1)).to(device)
+                    current_keyval = wm_keyval.reshape(batch_size, -1, dim)
+                    current_query = self._wm_query_embedding.weight[None, :current_frame*(self._config.num_views*self._config.num_scene_query_token+1), :].repeat(batch_size, 1, 1).reshape(batch_size, -1, dim)
+                
+                    wm_next_latent = self.temporal_world_model.forward(
+                        query=current_query,
+                        keyval=current_keyval,
+                        time_frames=current_frame,
+                        height=self._config.num_views,
+                        width=self._config.num_scene_query_token,
+                        tgt_mask=attention_mask,
+                        memory_mask=attention_mask
+                    )
+                    wm_next_latent = wm_next_latent.reshape(batch_size, current_frame, -1, dim)
+                    wm_keyval = wm_keyval.reshape(batch_size, current_frame, -1, dim)
+                    wm_keyval = torch.cat([wm_keyval, wm_next_latent[:, -1, ...].unsqueeze(1)], dim=1)
+
+                trajectory['wm_next_latent'] = wm_next_latent
+            
+            # GT latent for loss calculation
+            trajectory['gt_next_latent'] = gt_keyval_final[:, 1:, ...]
+            
+            # refine
+            refine_query = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...]
+            refine_keyval = trajectory['wm_next_latent'].reshape(batch_size, num_frames-1, -1, dim)[:, -1, ...]
+            refine_query_out = ego_query_out.reshape(batch_size, num_frames, -1, dim)[:, 1, ...] + self.refine_block(refine_query, refine_keyval)
+            trajectory['refined_traj'] = self.refine_traj_head(refine_query_out, cmd=cmd[:, 1])
+
+        return trajectory
+
     def compute_traj_loss(self, trajectories, gt):
         loss_dict = {}
         all_trajs = trajectories.get("all_trajectories")  # [B, M, T, 3]

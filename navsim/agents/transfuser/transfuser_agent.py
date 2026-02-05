@@ -209,6 +209,21 @@ class TransfuserAgent(AbstractAgent):
     def forward_train(self, features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         return self._transfuser_model.forward_train(features)
     
+    def forward_train_curriculum(self, features: Dict[str, torch.Tensor], ar_ratio: float = 0.0, global_step: int = 0) -> Dict[str, torch.Tensor]:
+        """
+        课程学习训练方法，代理调用 model 的 forward_train_curriculum
+        
+        Args:
+            features: 输入特征
+            ar_ratio: 自回归比例 (0.0 = 纯 teacher forcing, 1.0 = 纯自回归)
+            global_step: 全局训练步数，用于 DDP 多卡同步
+        """
+        if hasattr(self._transfuser_model, 'forward_train_curriculum'):
+            return self._transfuser_model.forward_train_curriculum(features, ar_ratio, global_step)
+        else:
+            # 如果 model 没有实现 curriculum 方法，回退到普通训练
+            return self._transfuser_model.forward_train(features)
+    
     def forward_test(self, features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         return self._transfuser_model.forward_test(features)
     

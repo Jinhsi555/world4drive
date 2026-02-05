@@ -154,6 +154,14 @@ class TransfuserConfig:
     _use_mlp_ensemble: bool = False
     is_eval: bool = False
     
+    # Curriculum Learning 配置
+    use_curriculum_learning: bool = False        # 是否启用课程学习
+    curriculum_start_epoch: int = 10             # 开始过渡的 epoch
+    curriculum_end_epoch: int = 30               # 完成过渡的 epoch
+    curriculum_start_step: int = 0               # 基于 step 的起始点（与 epoch 二选一，优先使用 step）
+    curriculum_end_step: int = 0                 # 基于 step 的结束点
+    curriculum_schedule: str = 'linear'          # 过渡策略: 'linear', 'cosine', 'step'
+    
     #epona config
     # closed_traj_evaluation: bool = False
 

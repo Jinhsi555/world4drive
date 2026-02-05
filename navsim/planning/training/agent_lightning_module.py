@@ -1,4 +1,5 @@
 import os
+import math
 from typing import Dict, Tuple
 import numpy as np
 
@@ -31,6 +32,54 @@ class AgentLightningModule(pl.LightningModule):
         self._cfg = cfg
         self.agent = agent
 
+    def _get_curriculum_ratio(self) -> float:
+        """
+        计算当前的自回归训练比例
+        
+        Returns:
+            float: 自回归比例 (0.0 = 纯 teacher forcing, 1.0 = 纯自回归)
+        """
+        if not self._cfg.use_curriculum_learning:
+            return 0.0
+        
+        # 优先使用 step-based 调度
+        if self._cfg.curriculum_start_step > 0 or self._cfg.curriculum_end_step > 0:
+            current = self.global_step
+            start = self._cfg.curriculum_start_step
+            end = self._cfg.curriculum_end_step
+        else:
+            # 使用 epoch-based 调度
+            current = self.current_epoch
+            start = self._cfg.curriculum_start_epoch
+            end = self._cfg.curriculum_end_epoch
+        
+        # 还未到达过渡开始点
+        if current < start:
+            return 0.0
+        
+        # 已经超过过渡结束点
+        if current >= end:
+            return 1.0
+        
+        # 计算进度比例
+        progress = (current - start) / max(end - start, 1)
+        
+        # 根据调度策略计算 ratio
+        schedule = self._cfg.curriculum_schedule
+        if schedule == 'linear':
+            ratio = progress
+        elif schedule == 'cosine':
+            # 余弦调度：从 0 缓慢开始，中间加速，最后缓慢到达 1
+            ratio = 0.5 * (1 - math.cos(math.pi * progress))
+        elif schedule == 'step':
+            # 阶梯式：到达 start 后立即切换到完全自回归
+            ratio = 1.0
+        else:
+            # 默认线性
+            ratio = progress
+        
+        return ratio
+
     def _step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], logging_prefix: str) -> Tensor:
         """
         Propagates the model forward and backwards and computes/logs losses and metrics.
@@ -43,7 +92,15 @@ class AgentLightningModule(pl.LightningModule):
             prediction = self.agent.forward_train(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
         elif logging_prefix=='train' and self._cfg.use_wm:
-            prediction = self.agent.forward_train(features)
+            # 课程学习：根据训练进度决定使用哪种训练模式
+            if self._cfg.use_curriculum_learning and hasattr(self.agent, 'forward_train_curriculum'):
+                ar_ratio = self._get_curriculum_ratio()
+                # 传入 global_step 确保 DDP 多卡训练时所有 GPU 做出相同决策
+                prediction = self.agent.forward_train_curriculum(features, ar_ratio, self.global_step)
+                # 记录当前的 ar_ratio
+                self.log("train/ar_ratio", ar_ratio, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            else:
+                prediction = self.agent.forward_train(features)
 
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
 
@@ -195,7 +252,7 @@ class AgentLightningModule(pl.LightningModule):
                     prediction = self.agent.forward_test(features)['first_traj']
                 elif self._cfg.use_wm and self._cfg.traj_mode == 'refine':
                     # eval with gt future feature
-                    prediction = self.agent.forward_train(features)['refined_traj']
+                    prediction = self.agent.forward_test(features)['refined_traj']
                 else:
                     prediction = self.agent.forward_test(features)
 
