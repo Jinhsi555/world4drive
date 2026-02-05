@@ -108,3 +108,9 @@ class AbstractAgent(torch.nn.Module, ABC):
         See navsim.planning.training.callbacks for examples.
         """
         return []
+
+    def update_target_encoder(self, momentum: float):
+        """
+        Updates the target encoder with momentum.
+        """
+        pass

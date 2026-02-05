@@ -2,6 +2,8 @@ import gzip
 import logging
 import os
 import pickle
+import numpy as np
+from PIL import Image
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +30,9 @@ def dump_feature_target_to_pickle(path: Path, data_dict: Dict[str, torch.Tensor]
     with gzip.open(path, "wb", compresslevel=1) as f:
         pickle.dump(data_dict, f)
 
+def load_geometry_feature_from_npy(path: Path) -> np.ndarray:
+    """Helper function to load geometry feature from npy."""
+    return np.load(path)
 
 class CacheOnlyDataset(torch.utils.data.Dataset):
     """Dataset wrapper for feature/target datasets from cache only."""
@@ -124,7 +129,7 @@ class CacheOnlyDataset(torch.utils.data.Dataset):
             data_dict = load_feature_target_from_pickle(data_dict_path)
             for frame_name, frame_token in data_dict.items():
                 if 'camera_feature' in frame_name:
-                    dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
+                    dino_feature_path = self._cache_path / 'feature_cache' / str(frame_token) / (str(frame_token) + ".gz")
                     frame_dict = load_feature_target_from_pickle(dino_feature_path)
                     data_dict[frame_name] = frame_dict['dino_feature']
             features.update(data_dict)
@@ -224,18 +229,39 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
         :param token: unique string identifier of sample
         :return: tuple of feature and target dictionaries
         """
-
+        import time
+        start = time.time()
         token_path = self._valid_cache_paths[token]
-
+        if 'train' in self._cache_path.name:
+            dataset_path = Path(os.getenv('OPENSCENE_DATA_ROOT')) / 'sensor_blobs' / 'trainval'
+        else:
+            dataset_path = Path(os.getenv('OPENSCENE_DATA_ROOT')) / 'sensor_blobs' / 'test'
         features: Dict[str, torch.Tensor] = {}
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
             data_dict = load_feature_target_from_pickle(data_dict_path)
+
+            each_frame_start = time.time()
             for frame_name, frame_token in data_dict.items():
                 if 'camera_feature' in frame_name:
-                    dino_feature_path = self._cache_path / 'feature_cache' / (str(frame_token) + ".gz")
-                    frame_dict = load_feature_target_from_pickle(dino_feature_path)
-                    data_dict[frame_name] = frame_dict['dino_feature']
+                    all_feature_path = self._cache_path / 'feature_cache' / str(frame_token) / (str(frame_token) + ".gz")
+                    frame_dict = load_feature_target_from_pickle(all_feature_path)
+
+                    npy_start = time.time()
+                    frame_dict['geometry_feature'] = torch.tensor(
+                        load_geometry_feature_from_npy(frame_dict['geometry_feature']),
+                        dtype=torch.float32
+                    )
+                    npy_end = time.time()
+                    print(f"Load {frame_name} npy takes {npy_end - npy_start} seconds\n")
+
+                    # image_paths = frame_dict['dino_feature']
+                    # images = [Image.open(dataset_path / image_path) for image_path in image_paths]
+                    # frame_dict['dino_feature'] = np.array(images)
+                    data_dict[frame_name] = frame_dict
+            each_frame_end = time.time()
+            print(f"Load {data_dict_path} takes {each_frame_end - each_frame_start} seconds\n")
+
             features.update(data_dict)
 
         targets: Dict[str, torch.Tensor] = {}
@@ -246,7 +272,7 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
 
         ## 将token放入features中
         features['token'] = token
-
+        print(f"Load {token} takes {time.time() - start} seconds\n")
         return (features, targets)
 
 

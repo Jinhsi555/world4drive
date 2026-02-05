@@ -45,23 +45,6 @@ class AgentLightningModule(pl.LightningModule):
         elif logging_prefix=='train' and self._cfg.use_wm:
             prediction = self.agent.forward_train(features)
 
-            prediction['next_latent'] = torch.stack(
-                [
-                    features['camera_feature_prev_3'],
-                    # features['camera_feature_prev_2'],
-                    # features['camera_feature_prev_1'],
-                    features['camera_feature'],
-                    # features['camera_feature_next_1'],
-                    # features['camera_feature_next_2'],
-                    # features['camera_feature_next_3'],
-                    features['camera_feature_next_4'],
-                    # features['camera_feature_next_5'],
-                    # features['camera_feature_next_6'],
-                    # features['camera_feature_next_7'],
-                    features['camera_feature_next_8'],
-                ], dim=1
-            )[:, 1:, :, 1:, ...]
-
             cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
 
             # 合并两个损失字典
@@ -75,22 +58,6 @@ class AgentLightningModule(pl.LightningModule):
         elif logging_prefix=='val' and self._cfg.use_wm:
 
             prediction = self.agent.forward_test(features)
-            prediction['next_latent'] = prediction['next_latent'] = torch.stack(
-                [
-                    features['camera_feature_prev_3'],
-                    # features['camera_feature_prev_2'],
-                    # features['camera_feature_prev_1'],
-                    features['camera_feature'],
-                    # features['camera_feature_next_1'],
-                    # features['camera_feature_next_2'],
-                    # features['camera_feature_next_3'],
-                    features['camera_feature_next_4'],
-                    # features['camera_feature_next_5'],
-                    # features['camera_feature_next_6'],
-                    # features['camera_feature_next_7'],
-                    features['camera_feature_next_8'],
-                ], dim=1
-            )[:, 1:, :, 1:, ...]
 
             # prediction = self.agent.forward_test(features)
             loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
@@ -176,6 +143,12 @@ class AgentLightningModule(pl.LightningModule):
         """
         return self._step(batch, "train")
 
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        """
+        Called at the end of every training batch.
+        """
+        self.agent.update_target_encoder(self._cfg.target_momentum)
+
     def validation_step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], batch_idx: int):
         """
         Step called on validation samples
@@ -221,7 +194,8 @@ class AgentLightningModule(pl.LightningModule):
                 elif self._cfg.use_wm and self._cfg.traj_mode == 'first':
                     prediction = self.agent.forward_test(features)['first_traj']
                 elif self._cfg.use_wm and self._cfg.traj_mode == 'refine':
-                    prediction = self.agent.forward_test(features)['refined_traj']
+                    # eval with gt future feature
+                    prediction = self.agent.forward_train(features)['refined_traj']
                 else:
                     prediction = self.agent.forward_test(features)
 

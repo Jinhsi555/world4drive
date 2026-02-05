@@ -69,11 +69,20 @@ class TransfuserConfig:
     cache_mode: bool = False
 
     # Transformer
-    tf_d_model: int = 1024
+    tf_d_model: int = 256
     tf_d_ffn: int = 1024
     tf_num_layers: int = 3
     tf_num_head: int = 8
     tf_dropout: float = 0.0
+
+    dino_d_model: int = 384
+
+    # LoRA config
+    use_lora: bool = True
+    lora_rank: int = 32
+    lora_alpha: int = 64
+    lora_dropout: float = 0.1
+    lora_target_modules: str = "all-linear"
 
     # detection
     num_bounding_boxes: int = 30
@@ -126,6 +135,7 @@ class TransfuserConfig:
     num_frames: int = 12
     num_mode: int = 18
     num_views: int = 3
+    num_scene_query_token: int = 16
     traj_loss_weight: float = 1.0
     traj_cls_loss_weight: float = 0.2
     diversity_loss_weight: float = 0.0
@@ -133,13 +143,16 @@ class TransfuserConfig:
     traj_cmd_loss_weight: float = 0.5
     use_cmd_embed: bool = True
     use_wm: bool = True
+    use_lora: bool = True
     traj_mode:bool = 'first'
     wm_loss_weight: float = 0.2
+    target_momentum: float = 0.999
     use_ar: bool = False
     use_ar_wm: bool = False
     action_chunk_size: int = 4
     ar_wm_replace_prob: float = 0.1
     _use_mlp_ensemble: bool = False
+    is_eval: bool = False
     
     #epona config
     # closed_traj_evaluation: bool = False

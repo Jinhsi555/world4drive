@@ -20,7 +20,5 @@ torchrun \
     agent.config.use_cmd_embed=False \
     agent.config.cache_mode=True \
     experiment_name=transfuser_cache_for_training \
-    cache_path=$NAVSIM_EXP_ROOT/geometry_feature_cache_navtrain \
+    cache_path=$NAVSIM_EXP_ROOT/camera_path_feature_cache_navtrain \
     train_test_split=$TRAIN_TEST_SPLIT \
-    worker.threads_per_node=14
-    # worker=sequential \

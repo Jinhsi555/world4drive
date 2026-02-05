@@ -30,7 +30,7 @@ class PositionGetter:
         """Initializes the position generator with an empty cache."""
         self.position_cache: Dict[Tuple[int, int, int], torch.Tensor] = {}
 
-    def __call__(self, batch_size: int, time: int, height: int, width: int, device: torch.device) -> torch.Tensor:
+    def __call__(self, batch_size: int, time: int, view: int, scene: int, device: torch.device) -> torch.Tensor:
         """Generates spatiotemporal positions for a batch of patches.
 
         Args:
@@ -44,15 +44,33 @@ class PositionGetter:
             Tensor of shape (batch_size, time*height*width, 3) containing t,y,x coordinates
             for each position in the grid, repeated for each batch item.
         """
-        if (time, height, width) not in self.position_cache:
-            t_coords = torch.arange(time, device=device)
-            y_coords = torch.arange(height, device=device)
-            x_coords = torch.arange(width, device=device)
-            positions = torch.cartesian_prod(t_coords, y_coords, x_coords)
-            self.position_cache[time, height, width] = positions
-
-        cached_positions = self.position_cache[time, height, width]
-        return cached_positions.view(1, time * height * width, 3).expand(batch_size, -1, -1).clone()
+        if (time, view, scene) not in self.position_cache:
+            # 生成基础坐标
+            t_coords = torch.arange(1, time+1, device=device)
+            v_coords = torch.arange(1, view+1, device=device)
+            s_coords = torch.arange(1, scene+1, device=device)
+            
+            # 生成所有组合 (t, v, s)
+            positions = torch.cartesian_prod(t_coords, v_coords, s_coords)  # [144, 3]
+            
+            # 创建ego_status tokens: (t, 0, 0) for each time step
+            ego_status = torch.zeros(time, 3, device=device)
+            ego_status[:, 0] = torch.arange(1, time+1, device=device)
+            
+            # 重塑positions以便插入ego_status
+            positions = positions.view(time, view*scene, 3)  # [3, 48, 3]
+            
+            # 在每个时间步的view-scene组合前插入ego_status
+            all_positions = []
+            for t in range(time):
+                all_positions.append(ego_status[t:t+1])      # [1, 3]
+                all_positions.append(positions[t])           # [48, 3]
+            
+            positions = torch.cat(all_positions, dim=0)      # [147, 3]
+            self.position_cache[(time, view, scene)] = positions
+        
+        cached_positions = self.position_cache[(time, view, scene)]
+        return cached_positions.view(1, -1, 3).expand(batch_size, -1, -1).clone()
 
 
 class RotaryPositionEmbedding3D(nn.Module):
@@ -74,10 +92,11 @@ class RotaryPositionEmbedding3D(nn.Module):
         frequency_cache: Cache for storing precomputed frequency components.
     """
 
-    def __init__(self, temporal_frequency: float = 10.0, spatial_frequency: float = 100.0, scaling_factor: float = 1.0):
+    def __init__(self, temporal_frequency: float = 10.0, view_frequency: float = 50.0, spatial_frequency: float = 100.0, scaling_factor: float = 1.0):
         """Initializes the 3D RoPE module."""
         super().__init__()
         self.temporal_frequency = temporal_frequency
+        self.view_frequency = view_frequency
         self.spatial_frequency = spatial_frequency
         self.scaling_factor = scaling_factor
         self.frequency_cache: Dict[Tuple, Tuple[torch.Tensor, torch.Tensor]] = {}
@@ -172,37 +191,37 @@ class RotaryPositionEmbedding3D(nn.Module):
 
         # Compute feature dimension for each spatiotemporal direction
         # feature_dim = tokens.size(-1) // 3
-        temp_dim = 512
-        vert_dim = 256
-        hori_dim = 256
+        temp_dim = tokens.size(-1) // 4
+        view_dim = tokens.size(-1) // 4
+        scene_dim = tokens.size(-1) // 2
 
         # Get frequency components for each dimension with different base frequencies
         max_temporal = int(positions[..., 0].max()) + 1
-        max_vertical = int(positions[..., 1].max()) + 1
-        max_horizontal = int(positions[..., 2].max()) + 1
+        max_view = int(positions[..., 1].max()) + 1
+        max_scene = int(positions[..., 2].max()) + 1
         
         # Temporal dimension uses temporal_frequency
         cos_temp, sin_temp = self._compute_frequency_components(
             temp_dim, max_temporal, self.temporal_frequency, tokens.device, tokens.dtype
         )
         # Spatial dimensions use spatial_frequency
-        cos_vert, sin_vert = self._compute_frequency_components(
-            vert_dim, max_vertical, self.spatial_frequency, tokens.device, tokens.dtype
+        cos_view, sin_view = self._compute_frequency_components(
+            view_dim, max_view, self.view_frequency, tokens.device, tokens.dtype
         )
-        cos_hori, sin_hori = self._compute_frequency_components(
-            hori_dim, max_horizontal, self.spatial_frequency, tokens.device, tokens.dtype
+        cos_scene, sin_scene = self._compute_frequency_components(
+            scene_dim, max_scene, self.spatial_frequency, tokens.device, tokens.dtype
         )
 
         # Split features for temporal, vertical and horizontal processing
-        temporal_features, vertical_features, horizontal_features = tokens.split([temp_dim, vert_dim, hori_dim], dim=-1)
+        temporal_features, view_features, scene_features = tokens.split([temp_dim, view_dim, scene_dim], dim=-1)
 
         # Apply RoPE separately for each dimension with dimension-specific frequencies
         temporal_features = self._apply_1d_rope(temporal_features, positions[..., 0], cos_temp, sin_temp)
-        vertical_features = self._apply_1d_rope(vertical_features, positions[..., 1], cos_vert, sin_vert)
-        horizontal_features = self._apply_1d_rope(horizontal_features, positions[..., 2], cos_hori, sin_hori)
+        view_features = self._apply_1d_rope(view_features, positions[..., 1], cos_view, sin_view)
+        scene_features = self._apply_1d_rope(scene_features, positions[..., 2], cos_scene, sin_scene)
 
         # Combine processed features
-        return torch.cat((temporal_features, vertical_features, horizontal_features), dim=-1)
+        return torch.cat((temporal_features, view_features, scene_features), dim=-1)
 
 
 class PositionGetter4D:

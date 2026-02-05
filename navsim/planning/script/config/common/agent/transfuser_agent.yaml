@@ -43,11 +43,15 @@ config:
   ar_wm_replace_prob: 0.1
   _use_mlp_ensemble: false
 
-  tf_d_model: 1024
+  tf_d_model: 256
   tf_d_ffn: 1024
-  tf_num_layers: 3
+  tf_num_layers: 4
   tf_num_head: 8
-  tf_dropout: 0.0
+  tf_dropout: 0.1
+
+  dino_d_model: 384
+
+  target_momentum: 0.999
 
   #epona config
   # closed_traj_evaluation: false
@@ -64,6 +68,7 @@ config:
   vocab_trajs_path: /mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/GTRS/traj_final/16384.npy
 
   cache_mode: false
+  is_eval: false
 
 lr: 1e-4
 checkpoint_path: null
