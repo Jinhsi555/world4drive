@@ -71,9 +71,18 @@ class TransfuserConfig:
     # Transformer
     tf_d_model: int = 256
     tf_d_ffn: int = 1024
-    tf_num_layers: int = 3
+    tf_num_layers: int = 4
     tf_num_head: int = 8
     tf_dropout: float = 0.0
+
+    # geometry transformer decoder
+    gtf_d_model: int = 256
+    gtf_d_ffn: int = 1024
+    gtf_num_layers: int = 4
+    gtf_num_head: int = 8
+    gtf_dropout: float = 0.0
+    num_geometry_feature_token: int = 519
+    geometry_loss_weight: float = 0.6
 
     dino_d_model: int = 384
 
@@ -145,7 +154,7 @@ class TransfuserConfig:
     use_wm: bool = True
     use_lora: bool = True
     traj_mode:bool = 'first'
-    wm_loss_weight: float = 0.2
+    wm_loss_weight: float = 0.6
     target_momentum: float = 0.999
     use_ar: bool = False
     use_ar_wm: bool = False

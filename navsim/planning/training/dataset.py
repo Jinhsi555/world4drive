@@ -241,26 +241,20 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
             data_dict = load_feature_target_from_pickle(data_dict_path)
 
-            each_frame_start = time.time()
             for frame_name, frame_token in data_dict.items():
                 if 'camera_feature' in frame_name:
                     all_feature_path = self._cache_path / 'feature_cache' / str(frame_token) / (str(frame_token) + ".gz")
                     frame_dict = load_feature_target_from_pickle(all_feature_path)
 
-                    npy_start = time.time()
                     frame_dict['geometry_feature'] = torch.tensor(
                         load_geometry_feature_from_npy(frame_dict['geometry_feature']),
                         dtype=torch.float32
                     )
-                    npy_end = time.time()
-                    print(f"Load {frame_name} npy takes {npy_end - npy_start} seconds\n")
 
                     # image_paths = frame_dict['dino_feature']
                     # images = [Image.open(dataset_path / image_path) for image_path in image_paths]
                     # frame_dict['dino_feature'] = np.array(images)
                     data_dict[frame_name] = frame_dict
-            each_frame_end = time.time()
-            print(f"Load {data_dict_path} takes {each_frame_end - each_frame_start} seconds\n")
 
             features.update(data_dict)
 
@@ -272,7 +266,6 @@ class CacheOnlyDatasetParallel(torch.utils.data.Dataset):
 
         ## 将token放入features中
         features['token'] = token
-        print(f"Load {token} takes {time.time() - start} seconds\n")
         return (features, targets)
 
 

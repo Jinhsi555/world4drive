@@ -253,6 +253,8 @@ class AgentLightningModule(pl.LightningModule):
                 elif self._cfg.use_wm and self._cfg.traj_mode == 'refine':
                     # eval with gt future feature
                     prediction = self.agent.forward_test(features)['refined_traj']
+                elif self._cfg.use_wm and self._cfg.traj_mode == 'gt':
+                    prediction = self.agent.forward_train(features)['refined_traj']
                 else:
                     prediction = self.agent.forward_test(features)
 
