@@ -303,8 +303,8 @@ class TemporalWorldModel(nn.Module):
             # Generate 3D positions (t, v, s)
             num_views = height
             num_scene_tokens = width
-            query_pos = self.position_getter(batch_size, time_frames, num_views, num_scene_tokens, device).to(torch.long)
-            keyval_pos = self.position_getter(batch_size, time_frames, num_views, num_scene_tokens, device).to(torch.long)
+            query_pos = self.position_getter(batch_size, time_frames, num_views, num_scene_tokens, device, time_list=[4, 12]).to(torch.long)
+            keyval_pos = self.position_getter(batch_size, time_frames, num_views, num_scene_tokens, device, time_list=[1, 4]).to(torch.long)
         
         output = self.future_decoder(
             tgt=query,

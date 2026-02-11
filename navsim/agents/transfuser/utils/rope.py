@@ -30,7 +30,7 @@ class PositionGetter:
         """Initializes the position generator with an empty cache."""
         self.position_cache: Dict[Tuple[int, int, int], torch.Tensor] = {}
 
-    def __call__(self, batch_size: int, time: int, view: int, scene: int, device: torch.device) -> torch.Tensor:
+    def __call__(self, batch_size: int, time: int, view: int, scene: int, device: torch.device, time_list: list) -> torch.Tensor:
         """Generates spatiotemporal positions for a batch of patches.
 
         Args:
@@ -46,27 +46,32 @@ class PositionGetter:
         """
         if (time, view, scene) not in self.position_cache:
             # 生成基础坐标
-            t_coords = torch.arange(1, time+1, device=device)
+            # t_coords = torch.arange(1, time+1, device=device)  # 原代码 使用顺序时间 [1,2,3,...,time]
+            t_coords = torch.tensor(time_list, device=device)  # 自定义时间坐标
             v_coords = torch.arange(1, view+1, device=device)
             s_coords = torch.arange(1, scene+1, device=device)
             
             # 生成所有组合 (t, v, s)
-            positions = torch.cartesian_prod(t_coords, v_coords, s_coords)  # [144, 3]
+            positions = torch.cartesian_prod(t_coords, v_coords, s_coords)  # [t*v*s, 3]
             
             # 创建ego_status tokens: (t, 0, 0) for each time step
+            # ego_status = torch.zeros(time, 3, device=device)
+            # ego_status[:, 0] = torch.arange(1, time+1, device=device)
+            
+            # 修改为使用自定义时间坐标
             ego_status = torch.zeros(time, 3, device=device)
-            ego_status[:, 0] = torch.arange(1, time+1, device=device)
+            ego_status[:, 0] = t_coords  # 直接使用自定义的t_coords
             
             # 重塑positions以便插入ego_status
-            positions = positions.view(time, view*scene, 3)  # [3, 48, 3]
+            positions = positions.view(time, view*scene, 3)  # [t, v*s, 3]
             
             # 在每个时间步的view-scene组合前插入ego_status
             all_positions = []
             for t in range(time):
                 all_positions.append(ego_status[t:t+1])      # [1, 3]
-                all_positions.append(positions[t])           # [48, 3]
+                all_positions.append(positions[t])           # [v*s, 3]
             
-            positions = torch.cat(all_positions, dim=0)      # [147, 3]
+            positions = torch.cat(all_positions, dim=0)      # [t*(v*s+1), 3]
             self.position_cache[(time, view, scene)] = positions
         
         cached_positions = self.position_cache[(time, view, scene)]
@@ -92,7 +97,7 @@ class RotaryPositionEmbedding3D(nn.Module):
         frequency_cache: Cache for storing precomputed frequency components.
     """
 
-    def __init__(self, temporal_frequency: float = 10.0, view_frequency: float = 50.0, spatial_frequency: float = 100.0, scaling_factor: float = 1.0):
+    def __init__(self, temporal_frequency: float = 50.0, view_frequency: float = 10.0, spatial_frequency: float = 100.0, scaling_factor: float = 1.0):
         """Initializes the 3D RoPE module."""
         super().__init__()
         self.temporal_frequency = temporal_frequency

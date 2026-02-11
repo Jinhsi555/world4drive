@@ -113,6 +113,8 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_dino_lora import W4DModel
         elif self._config.model_version == 'dino_geometry':
             from navsim.agents.transfuser.w4d_model_dino_lora_geometry import W4DModel
+        elif self._config.model_version == 'dino_geometry_openloop':
+            from navsim.agents.transfuser.w4d_model_dino_lora_geometry_openloop import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)

@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e-4
+experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -25,24 +25,24 @@ torchrun \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
     --config-name ${config} \
     agent=transfuser_agent \
-    dataloader.params.batch_size=8 \
+    dataloader.params.batch_size=4 \
     dataloader.params.num_workers=12 \
     experiment_name=$experiment_name \
     train_test_split=$TRAIN_TEST_SPLIT \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/feature_cache_navtrain \
-    agent.config.model_version='dino_geometry' \
+    agent.config.model_version='dino_geometry_openloop' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
-    agent.config.num_frames=4 \
+    agent.config.num_frames=3 \
     agent.config.tf_d_model=256 \
     agent.config.tf_d_ffn=1024 \
     agent.config.wm_loss_weight=0.5 \
-    agent.config.curriculum_start_epoch=5 \
-    agent.config.curriculum_end_epoch=30 \
+    agent.config.curriculum_start_epoch=100 \
+    agent.config.curriculum_end_epoch=100 \
     agent.lr=5e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \

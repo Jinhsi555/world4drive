@@ -14,7 +14,7 @@ SYNTHETIC_SENSOR_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/sensor_blobs
 SYNTHETIC_SCENES_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/synthetic_scene_pickles
 split=navtest
 agent=transfuser_agent
-dir=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop/navtest_eval_one_stage_train_all_first
+dir=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop/navtest_eval_one_stage_train_all_refine
 metric_cache_path="${NAVSIM_EXP_ROOT}/metric_cache"
 cd ${NAVSIM_DEVKIT_ROOT}
 ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop/2026.02.10.17.57.37/lightning_logs/version_0/checkpoints
@@ -155,7 +155,7 @@ launch_eval() {
           agent.config.use_wm=True \
           agent.config.tf_d_model=256 \
           agent.config.tf_d_ffn=1024 \
-          +agent.config.traj_mode='first' \
+          +agent.config.traj_mode='refine' \
           agent.config.is_eval=True \
           agent.config.use_cmd_embed=False \
           traffic_agents=non_reactive \

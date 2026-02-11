@@ -258,9 +258,9 @@ class AgentLightningModule(pl.LightningModule):
                 else:
                     prediction = self.agent.forward_test(features)
 
-                poses = prediction['trajectory'].cpu().numpy()  # (B, T, 3)
-                cls_logits = prediction['cls_logits'].cpu().numpy()
-                all_trajectories = prediction['all_trajectories'].cpu().numpy() # (B, K, T, 3)
+                poses = prediction['trajectory'].cpu().float().numpy()  # (B, T, 3)
+                cls_logits = prediction['cls_logits'].cpu().float().numpy()
+                all_trajectories = prediction['all_trajectories'].cpu().float().numpy() # (B, K, T, 3)
                 tokens = features['token']
 
                 if poses.shape[1] == 40:

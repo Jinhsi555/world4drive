@@ -41,13 +41,13 @@
                 "use_cache_without_dataset=True",
                 "force_cache_computation=False",
                 "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/feature_cache_navtest",
-                "agent.config.model_version='dino_geometry'",
+                "agent.config.model_version='dino_geometry_openloop'",
                 "agent.config.num_mode=4",
                 "agent.config.use_cmd_embed=False",
                 "agent.config.use_wm=True",
                 "agent.config.tf_d_model=256",
                 "agent.config.tf_d_ffn=1024",
-                "agent.config.num_frames=4",
+                "agent.config.num_frames=3",
                 "worker=sequential",
                 "trainer.params.precision='bf16-mixed'",
                 // "agent.config.action_chunk_size=4",
@@ -75,7 +75,7 @@
             "cwd": "/vepfs-mlp2/c20250502/haoce/wlb/world4drive",
             "args": [
                 "agent=transfuser_agent",
-                "agent.config.model_version='dino_lora'",
+                "agent.config.model_version='dino_geometry'",
                 "agent.config.num_mode=4",
                 "agent.config.num_frames=4",
                 "agent.config.traj_cmd_loss_weight=0",
@@ -83,8 +83,8 @@
                 "agent.config.tf_d_model=256",
                 "agent.config.tf_d_ffn=1024",
                 "agent.config.use_wm=True",
-                "agent.checkpoint_path='/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_lora/512/2026.02.02.14.32.25/lightning_logs/version_0/checkpoints/epoch89.ckpt'",
-                "+agent.config.traj_mode='first'",
+                "agent.checkpoint_path='/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e-4/2026.02.08.19.33.49/lightning_logs/version_0/checkpoints/epoch=64-step=13130.ckpt'",
+                "+agent.config.traj_mode='refine'",
                 "experiment_name=pdms_w4d_32gpu_4bs_debug",
                 "train_test_split=navtest",
                 "metric_cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/metric_cache",
@@ -92,7 +92,8 @@
                 // "force_cache_computation=False",
                 "cache_path=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/feature_cache_navtest",
                 "worker=sequential",
-                "dataloader.params.num_workers=1"
+                "dataloader.params.num_workers=1",
+                "trainer.params.precision='bf16-mixed'"
                 
             ],
             "env": {
