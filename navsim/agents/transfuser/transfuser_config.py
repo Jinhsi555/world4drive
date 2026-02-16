@@ -171,6 +171,17 @@ class TransfuserConfig:
     curriculum_start_step: int = 0               # 基于 step 的起始点（与 epoch 二选一，优先使用 step）
     curriculum_end_step: int = 0                 # 基于 step 的结束点
     curriculum_schedule: str = 'linear'          # 过渡策略: 'linear', 'cosine', 'step'
+
+    # 分阶段 Loss 权重调度配置
+    use_staged_loss: bool = False                           # 是否启用分阶段 loss 权重调度
+    staged_loss_schedule: str = 'linear'                    # 权重过渡策略: 'linear', 'cosine'
+    # 阶段 1: 只训 geometry + traj，不训 WM
+    staged_wm_start_epoch: int = 0                          # WM loss 开始引入的 epoch
+    staged_wm_rampup_epochs: int = 5                        # WM loss 从 0 增长到 wm_loss_weight 的 epoch 数
+    # 阶段 2~3: geometry 权重逐步衰减
+    staged_geometry_decay_start_epoch: int = 5              # geometry loss 开始衰减的 epoch
+    staged_geometry_decay_epochs: int = 10                  # geometry loss 衰减到最终值的 epoch 数
+    staged_geometry_final_weight: float = 0.1               # geometry loss 的最终权重系数（乘以 geometry_loss_weight）
     
     #epona config
     # closed_traj_evaluation: bool = False

@@ -1,4 +1,5 @@
 import copy
+import math
 from typing import Dict, Optional
 
 import numpy as np
@@ -853,6 +854,44 @@ class W4DModel(nn.Module):
         loss_dict["traj_loss"] = trajectory_loss * self.traj_loss_weight
         return loss_dict
 
+    def _get_staged_loss_scales(self, current_epoch: int) -> Dict[str, float]:
+        """根据训练阶段计算 loss 权重缩放系数。
+
+        Args:
+            current_epoch: 当前训练 epoch。
+
+        Returns:
+            包含 wm_scale 和 geometry_scale 的字典。
+        """
+        cfg = self._config
+
+        # WM loss: 从 staged_wm_start_epoch 开始，经过 staged_wm_rampup_epochs 从 0 增长到 1
+        if current_epoch < cfg.staged_wm_start_epoch:
+            wm_scale = 0.0
+        elif cfg.staged_wm_rampup_epochs <= 0:
+            wm_scale = 1.0
+        else:
+            progress = min((current_epoch - cfg.staged_wm_start_epoch) / cfg.staged_wm_rampup_epochs, 1.0)
+            if cfg.staged_loss_schedule == "cosine":
+                wm_scale = 0.5 * (1 - math.cos(math.pi * progress))
+            else:
+                wm_scale = progress
+
+        # Geometry loss: 从 staged_geometry_decay_start_epoch 开始衰减到 staged_geometry_final_weight
+        if current_epoch < cfg.staged_geometry_decay_start_epoch:
+            geometry_scale = 1.0
+        elif cfg.staged_geometry_decay_epochs <= 0:
+            geometry_scale = cfg.staged_geometry_final_weight
+        else:
+            progress = min((current_epoch - cfg.staged_geometry_decay_start_epoch) / cfg.staged_geometry_decay_epochs, 1.0)
+            if cfg.staged_loss_schedule == "cosine":
+                t = 0.5 * (1 - math.cos(math.pi * progress))
+            else:
+                t = progress
+            geometry_scale = 1.0 - (1.0 - cfg.staged_geometry_final_weight) * t
+
+        return {"wm_scale": wm_scale, "geometry_scale": geometry_scale}
+
     # the loss function for world model
     # @timed
     def compute_loss(
@@ -861,6 +900,7 @@ class W4DModel(nn.Module):
         targets: Dict[str, torch.Tensor],
         predictions: Dict[str, torch.Tensor],
         logging_prefix: Optional[str] = None,
+        current_epoch: int = 0,
     ) -> torch.Tensor:
         """计算模型损失。
 
@@ -905,14 +945,22 @@ class W4DModel(nn.Module):
         def wm_loss(wm_next_latent, gt_next_latent):
             wm_pred = F.normalize(wm_next_latent, dim=-1)
             wm_gt = F.normalize(gt_next_latent, dim=-1)
-            # wm_loss = F.cosine_similarity(wm_next_latent, gt_next_latent)
-            wm_loss = F.mse_loss(wm_next_latent, gt_next_latent)
+            wm_loss = F.mse_loss(wm_pred, wm_gt)
             return wm_loss
+
+        # 计算分阶段 loss 权重缩放系数
+        if self._config.use_staged_loss and logging_prefix == "train":
+            staged_scales = self._get_staged_loss_scales(current_epoch)
+            wm_weight = self.wm_loss_weight * staged_scales["wm_scale"]
+            geometry_weight = self.geometry_loss_weight * staged_scales["geometry_scale"]
+        else:
+            wm_weight = self.wm_loss_weight
+            geometry_weight = self.geometry_loss_weight
 
         # 世界模型损失
         if 'wm_next_latent' in predictions:
             wm_loss_a = wm_loss(predictions["wm_next_latent"], predictions["gt_next_latent"])
-            loss_dict["wm_loss"] = wm_loss_a * self.wm_loss_weight
+            loss_dict["wm_loss"] = wm_loss_a * wm_weight
 
         # geometry feature loss
         def geometry_feature_loss(geometry_feature_align, geometry_feature_gt):
@@ -924,7 +972,7 @@ class W4DModel(nn.Module):
 
         if 'geometry_feature_align' in predictions and 'geometry_feature_gt' in predictions:
             geometry_loss = geometry_feature_loss(predictions["geometry_feature_align"], predictions["geometry_feature_gt"])
-            loss_dict["geometry_loss"] = geometry_loss * self.geometry_loss_weight
+            loss_dict["geometry_loss"] = geometry_loss * geometry_weight
 
         return loss_dict
 

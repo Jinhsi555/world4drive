@@ -102,7 +102,13 @@ class AgentLightningModule(pl.LightningModule):
             else:
                 prediction = self.agent.forward_train(features)
 
-            cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix)
+            cur_loss = self.agent.compute_loss(features, targets, prediction, logging_prefix=logging_prefix, current_epoch=self.current_epoch)
+
+            # 记录分阶段 loss 权重调度信息
+            if self._cfg.use_staged_loss and hasattr(self.agent, '_get_staged_loss_scales'):
+                staged_scales = self.agent._get_staged_loss_scales(self.current_epoch)
+                self.log("train/staged_wm_scale", staged_scales["wm_scale"], on_step=True, on_epoch=False, prog_bar=False, sync_dist=True)
+                self.log("train/staged_geometry_scale", staged_scales["geometry_scale"], on_step=True, on_epoch=False, prog_bar=False, sync_dist=True)
 
             # 合并两个损失字典
             loss = {**cur_loss}
