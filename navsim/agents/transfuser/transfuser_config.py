@@ -88,10 +88,11 @@ class TransfuserConfig:
 
     # LoRA config
     use_lora: bool = True
-    lora_rank: int = 32
-    lora_alpha: int = 64
-    lora_dropout: float = 0.1
+    lora_rank: int = 64
+    lora_alpha: int = 128
+    lora_dropout: float = 0.0
     lora_target_modules: str = "all-linear"
+    use_rslora: bool = True
 
     # detection
     num_bounding_boxes: int = 30
