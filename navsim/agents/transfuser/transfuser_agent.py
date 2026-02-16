@@ -244,6 +244,7 @@ class TransfuserAgent(AbstractAgent):
         targets: Dict[str, torch.Tensor],
         predictions: Dict[str, torch.Tensor],
         logging_prefix: str = None,
+        current_epoch: int = 0,
     ) -> torch.Tensor:
         """Inherited, see superclass."""
         # return transfuser_loss(targets, predictions, self._config)
@@ -251,7 +252,8 @@ class TransfuserAgent(AbstractAgent):
             
             return self._transfuser_model.compute_loss(features,targets,
                                                     predictions,
-                                                    logging_prefix=logging_prefix)
+                                                    logging_prefix=logging_prefix,
+                                                    current_epoch=current_epoch)
         elif self._config.training_mode == 'ft':
 
             ## 计算参考模型输出
@@ -554,6 +556,10 @@ class TransfuserAgent(AbstractAgent):
     def update_target_encoder(self, momentum: float):
         if hasattr(self._transfuser_model, 'update_target_encoder'):
             self._transfuser_model.update_target_encoder(momentum)
+
+    def _get_staged_loss_scales(self, current_epoch: int) -> Dict[str, float]:
+        """透传到底层模型的分阶段 loss 权重计算。"""
+        return self._transfuser_model._get_staged_loss_scales(current_epoch)
 
     def get_optimizers(self) -> Union[Optimizer, Dict[str, Union[Optimizer, LRScheduler]]]:
         """Inherited, see superclass."""

@@ -80,6 +80,15 @@ config:
   curriculum_end_step: 0                 # 基于 step 的结束点
   curriculum_schedule: 'linear'          # 过渡策略: 'linear', 'cosine', 'step'
 
+  # 分阶段 Loss 权重调度配置
+  use_staged_loss: false
+  staged_loss_schedule: 'linear'
+  staged_wm_start_epoch: 0
+  staged_wm_rampup_epochs: 5
+  staged_geometry_decay_start_epoch: 5
+  staged_geometry_decay_epochs: 10
+  staged_geometry_final_weight: 0.1
+
 lr: 1e-4
 checkpoint_path: null
 

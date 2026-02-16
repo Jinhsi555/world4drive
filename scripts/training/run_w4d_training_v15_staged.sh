@@ -16,11 +16,10 @@ config="all_navtrain_training" # this config uses the entire navtrain dataset fo
 TRAIN_TEST_SPLIT=navtrain
 experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_50_epoch_lr6e_4_no_refine_mse_norm_staged_loss
 
-# 分阶段训练调度说明:
-# Epoch 0:      WM=0,   Geo=0.4  → 阶段1: 纯 geometry + traj
-# Epoch 1~5:    WM 0→0.4, Geo=0.4 → 阶段2a: WM 逐步引入
-# Epoch 5~15:   WM=0.4, Geo 0.4→0.04 → 阶段2b: geometry 逐步衰减
-# Epoch 15~100: WM=0.4, Geo=0.04 → 阶段3: WM 主导, geometry 仅正则化
+# 分阶段训练调度说明 (wm_loss_weight=0.6, geometry_loss_weight=0.6):
+# Epoch 0~19:   WM=0,     Geo=0.6  → 阶段1: 纯 geometry + traj（20 个 epoch 充分蒸馏几何）
+# Epoch 20~49:  WM 0→0.6, Geo 0.6→0.06 → 阶段2: WM 逐步引入，geometry 同步衰减
+# Epoch 50~100: WM=0.6,   Geo=0.06 → 阶段3: WM 主导，geometry 仅正则化
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
