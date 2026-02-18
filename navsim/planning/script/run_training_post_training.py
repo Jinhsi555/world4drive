@@ -86,6 +86,16 @@ def main(cfg: DictConfig) -> None:
     Main entrypoint for training an agent.
     :param cfg: omegaconf dictionary
     """
+    local_rank = int(os.getenv('LOCAL_RANK', 0))
+    world_size = int(os.getenv('WORLD_SIZE', 1))
+    rank = int(os.getenv('RANK', 0))
+
+    dist.init_process_group(
+        backend='nccl',
+        world_size=world_size,
+        rank=rank,
+    )
+    torch.cuda.set_device(local_rank)
 
     pl.seed_everything(cfg.seed, workers=True)
     logger.info(f"Global Seed set to {cfg.seed}")
@@ -114,13 +124,13 @@ def main(cfg: DictConfig) -> None:
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.test_logs[:50],
+            log_names=cfg.train_logs,
         )
         val_data = CacheOnlyDatasetParallel(
             cache_path=cfg.cache_path,
             feature_builders=agent.get_feature_builders(),
             target_builders=agent.get_target_builders(),
-            log_names=cfg.test_logs[:50],
+            log_names=cfg.val_logs,
         )
     else:
         logger.info("Building SceneLoader")

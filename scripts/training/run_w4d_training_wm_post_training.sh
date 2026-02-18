@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_50_epoch_lr6e_4_no_refine_mse_norm_staged_loss
+experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr2e_4_wm_post_training
 
 # 分阶段训练调度说明 (wm_loss_weight=0.6, geometry_loss_weight=0.6):
 # Epoch 0~19:   WM=0,     Geo=0.6  → 阶段1: 纯 geometry + traj（20 个 epoch 充分蒸馏几何）
@@ -27,17 +27,18 @@ torchrun \
     --node_rank=$MLP_ROLE_INDEX \
     --master_addr=$MLP_WORKER_0_HOST \
     --master_port=$MLP_WORKER_0_PORT \
-    $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
+    $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training_post_training.py \
     --config-name ${config} \
     agent=transfuser_agent \
-    dataloader.params.batch_size=4 \
+    dataloader.params.batch_size=8 \
     dataloader.params.num_workers=12 \
     experiment_name=$experiment_name \
     train_test_split=$TRAIN_TEST_SPLIT \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/feature_cache_navtrain \
-    agent.config.model_version='dino_geometry_no_refine_mse_normed' \
+    agent.checkpoint_path="'/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_geometry_only/2026.02.17.15.51.07/lightning_logs/version_0/checkpoints/epoch=49-step=10100.ckpt'" \
+    agent.config.model_version='dino_wm_post_training' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
@@ -47,17 +48,11 @@ torchrun \
     agent.config.tf_d_model=256 \
     agent.config.tf_d_ffn=1024 \
     agent.config.wm_loss_weight=0.6 \
-    agent.config.geometry_loss_weight=0.6 \
-    agent.config.use_staged_loss=True \
-    agent.config.staged_loss_schedule='linear' \
-    agent.config.staged_wm_start_epoch=20 \
-    agent.config.staged_wm_rampup_epochs=30 \
-    agent.config.staged_geometry_decay_start_epoch=20 \
-    agent.config.staged_geometry_decay_epochs=30 \
-    agent.config.staged_geometry_final_weight=0.1 \
+    agent.config.geometry_loss_weight=0.0 \
+    agent.config.use_staged_loss=False \
     agent.config.curriculum_start_epoch=100 \
     agent.config.curriculum_end_epoch=100 \
-    agent.lr=5e-4 \
+    agent.lr=2e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \
