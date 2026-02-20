@@ -14,12 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_geometry_only
-
-# 分阶段训练调度说明 (wm_loss_weight=0.6, geometry_loss_weight=0.6):
-# Epoch 0~19:   WM=0,     Geo=0.6  → 阶段1: 纯 geometry + traj（20 个 epoch 充分蒸馏几何）
-# Epoch 20~49:  WM 0→0.6, Geo 0.6→0.06 → 阶段2: WM 逐步引入，geometry 同步衰减
-# Epoch 50~100: WM=0.6,   Geo=0.06 → 阶段3: WM 主导，geometry 仅正则化
+experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_no_refine_without_lora_dino_base
 
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
@@ -37,24 +32,25 @@ torchrun \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/feature_cache_navtrain \
-    agent.config.model_version='dino_geometry_only' \
+    agent.config.model_version='dino_geometry_no_refine' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
     agent.config.num_frames=4 \
-    agent.config.num_scene_query_token=32 \
+    agent.config.num_scene_query_token=16 \
+    agent.config.dino_d_model=768 \
     agent.config.tf_d_model=256 \
     agent.config.tf_d_ffn=1024 \
     agent.config.wm_loss_weight=0.2 \
-    agent.config.geometry_loss_weight=1 \
-    agent.config.use_staged_loss=False \
+    agent.config.geometry_loss_weight=0.1 \
     agent.config.curriculum_start_epoch=100 \
     agent.config.curriculum_end_epoch=100 \
-    agent.lr=5e-4 \
+    agent.lr=2e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \
     trainer.params.precision='bf16-mixed' \
     trainer.params.accumulate_grad_batches=1 \
     trainer.params.max_epochs=100 \
+    # resume_ckpt_path="'/mnt/parallel_ssd/home/zdhs0121/Driving/navsim_workspace/world4drive/exp/training_w4d_agent_3mode_all_navtrain/2025.10.16.08.35.16/lightning_logs/version_0/checkpoints/epoch=29-step=12120.ckpt'"

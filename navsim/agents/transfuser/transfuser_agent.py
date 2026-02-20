@@ -115,18 +115,24 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_dino_lora_geometry import W4DModel
         elif self._config.model_version == 'dino_geometry_openloop':
             from navsim.agents.transfuser.w4d_model_dino_lora_geometry_openloop import W4DModel
-        elif self._config.model_version == 'dino_gt_geometry_openloop':
+        elif self._config.model_version == 'dino_gt_geometry_openloop':  # gt geometry feature for trajactory
             from navsim.agents.transfuser.w4d_model_dino_lora_gt_geometry_openloop import W4DModel
         elif self._config.model_version == 'dino_geometry_no_refine_mse_normed':
             from navsim.agents.transfuser.w4d_model_dino_lora_geometry_no_refine_mse_normed import W4DModel
         elif self._config.model_version == 'dino_geometry_no_refine_normed':
             from navsim.agents.transfuser.w4d_model_dino_lora_geometry_no_refine_normed import W4DModel
-        elif self._config.model_version == 'dino_geometry_only':
-            from navsim.agents.transfuser.w4d_model_dino_lora_geometry_only import W4DModel
-        elif self._config.model_version == 'dino_wm_post_training':
-            from navsim.agents.transfuser.w4d_model_dino_lora_wm_post_training import W4DModel
-        elif self._config.model_version == 'dino_geometry_no_refine':
-            from navsim.agents.transfuser.w4d_model_dino_geometry_no_refine import W4DModel
+        elif self._config.model_version == 'dino_small_geometry_only':
+            from navsim.agents.transfuser.w4d_model_dino_small_geometry_only import W4DModel
+        elif self._config.model_version == 'dino_small_wm_post_training':
+            from navsim.agents.transfuser.w4d_model_dino_small_lora_wm_post_training import W4DModel
+        elif self._config.model_version == 'dino_base_geometry_only':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_only import W4DModel
+        elif self._config.model_version == 'dino_base_wm_post_training':
+            from navsim.agents.transfuser.w4d_model_dino_base_lora_wm_post_training import W4DModel
+        elif self._config.model_version == 'dino_base_geometry_no_refine':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine import W4DModel
+        elif self._config.model_version == 'vit_base_geometry_no_refine':
+            from navsim.agents.transfuser.w4d_model_vit_base_geometry_no_refine import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)

@@ -14,10 +14,10 @@ SYNTHETIC_SENSOR_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/sensor_blobs
 SYNTHETIC_SCENES_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/synthetic_scene_pickles
 split=navtest
 agent=transfuser_agent
-dir=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_no_refine_geometry_normed/navtest_eval_one_stage_train_all_first
+dir=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_no_refine_without_lora_dino_base/navtest_eval_one_stage_train_all_first
 metric_cache_path="${NAVSIM_EXP_ROOT}/metric_cache"
 cd ${NAVSIM_DEVKIT_ROOT}
-ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_no_refine_geometry_normed/2026.02.14.13.45.49/lightning_logs/version_0/checkpoints
+ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_no_refine_without_lora_dino_base/2026.02.19.08.10.03/lightning_logs/version_0/checkpoints
 
 # 并行相关配置 (可通过环境变量覆盖)
 GPU_IDS=${GPU_IDS:-"0,1,2,3,4,5,6,7"}   # 逗号分隔 GPU id 列表
@@ -149,10 +149,12 @@ launch_eval() {
           cache_path="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/feature_cache_navtest" \
           metric_cache_path=${metric_cache_path} \
           train_test_split=${split} \
-          agent.config.model_version='dino_geometry_no_refine_normed' \
+          agent.config.model_version='dino_base_geometry_no_refine' \
           agent.config.num_mode=4 \
           agent.config.num_frames=4 \
+          agent.config.num_scene_query_token=16 \
           agent.config.use_wm=True \
+          agent.config.dino_d_model=768 \
           agent.config.tf_d_model=256 \
           agent.config.tf_d_ffn=1024 \
           +agent.config.traj_mode='first' \

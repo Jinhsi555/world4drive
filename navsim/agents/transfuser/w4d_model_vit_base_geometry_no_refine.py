@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
-from transformers.models.dinov2 import Dinov2Model
+from transformers import ViTConfig, ViTModel
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from peft import LoraConfig, get_peft_model
 
@@ -19,7 +19,7 @@ from .temporal_world_model import TemporalWorldModel
 from .utils.bridge_attention import BridgeAttentionTransformer
 
 class W4DModel(nn.Module):
-    """W4D 模型，结合 DINOv2 LoRA 编码器和几何查询的 Transformer 轨迹预测模型。
+    """W4D 模型，结合 vit LoRA 编码器和几何查询的 Transformer 轨迹预测模型。
 
     Args:
         config: TransFuser 配置对象。
@@ -48,13 +48,15 @@ class W4DModel(nn.Module):
             requires_grad=True,
         )
 
-        # define dino-LoRA encoder for vision query
-        dino_ckpt_path = "/vepfs-mlp2/c20250502/haoce/wlb/world4drive/checkpoints/dinov2-small"
-        self.dino_encoder = AutoModel.from_pretrained(dino_ckpt_path).to(self.scene_embeds.device)
-        self.dino_processor = AutoImageProcessor.from_pretrained(dino_ckpt_path)
-        self.dino_processor.crop_size = {"height": 224, "width": 448}
+        # define vit-LoRA encoder for vision query
+        vit_ckpt_path = "checkpoints/vit-base-patch16-224"
+        self.vit_encoder = AutoModel.from_pretrained(vit_ckpt_path).to(self.scene_embeds.device)
+        # self.vit_encoder.embeddings.patch_embeddings.image_size = (224, 448)
 
-        def _apply_lora_to_dino_encoder(encoder):
+        self.vit_processor = AutoImageProcessor.from_pretrained(vit_ckpt_path)
+        # self.vit_processor.size = {"height": 224, "width": 448}
+
+        def _apply_lora_to_vit_encoder(encoder):
             lora_config = LoraConfig(
                 r=self._config.lora_rank,
                 lora_alpha=self._config.lora_alpha,
@@ -63,7 +65,7 @@ class W4DModel(nn.Module):
                 use_rslora=self._config.use_rslora,
             )
             lora_encoder = get_peft_model(encoder, lora_config)
-            print("✅ LoRA applied to dino encoder.")
+            print("✅ LoRA applied to vit encoder.")
 
             for name, param in lora_encoder.named_parameters():
                 if "lora" in name:
@@ -84,16 +86,16 @@ class W4DModel(nn.Module):
 
             return lora_encoder
         
-        # online dino encoder with LoRA
-        # self.lora_dino_encoder = _apply_lora_to_dino_encoder(self.dino_encoder)
-        self.lora_dino_encoder = self.dino_encoder
+        # online vit encoder with LoRA
+        # self.lora_vit_encoder = _apply_lora_to_vit_encoder(self.vit_encoder)
+        self.lora_vit_encoder = self.vit_encoder
         
-        # target dino encoder for alignment
-        self.target_dino_encoder = copy.deepcopy(self.lora_dino_encoder)
-        for param in self.target_dino_encoder.parameters():
+        # target vit encoder for alignment
+        self.target_vit_encoder = copy.deepcopy(self.lora_vit_encoder)
+        for param in self.target_vit_encoder.parameters():
             param.requires_grad = False
         
-        self.dino_projector = nn.Sequential(
+        self.vit_projector = nn.Sequential(
             nn.Linear(config.dino_d_model, config.tf_d_ffn),
             nn.LayerNorm(config.tf_d_ffn),       # 中间层归一化，稳定激活
             nn.GELU(),
@@ -123,7 +125,6 @@ class W4DModel(nn.Module):
             nn.LayerNorm(1024),
             nn.GELU(),
             nn.Linear(1024, 2048),
-            nn.LayerNorm(2048),
         )
 
         # self.image_fc = nn.Linear(512, 256)
@@ -198,16 +199,16 @@ class W4DModel(nn.Module):
             self._wm_query_embedding = nn.Embedding(num_wm_query, config.tf_d_model)
             self.temporal_world_model = TemporalWorldModel(config, use_4d_rope=False)
     
-    def get_dino_features_with_scene_query(
+    def get_vit_features_with_scene_query(
         self,
-        model: Dinov2Model,
+        model: ViTModel,
         inputs: torch.Tensor,
         scene_query: torch.Tensor,
     ) -> BaseModelOutputWithPooling:
-        """使用可学习场景查询获取 DINO 特征。
+        """使用可学习场景查询获取 vit 特征。
 
         Args:
-            model: DINOv2 模型。
+            model: vitv2 模型。
             inputs: 输入图像张量。
             scene_query: 可学习的场景查询嵌入。
 
@@ -222,12 +223,10 @@ class W4DModel(nn.Module):
         embedding_output = model.embeddings(pixel_values, None)
         embedding_output = torch.cat([scene_query, embedding_output], dim=1)
 
-        encoder_outputs: BaseModelOutput = model.encoder(
-            embedding_output, None, None
-        )
+        encoder_outputs: BaseModelOutput = model.encoder(embedding_output)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = model.layernorm(sequence_output)
-        sequence_output = self.dino_projector(sequence_output)
+        sequence_output = self.vit_projector(sequence_output)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -242,7 +241,7 @@ class W4DModel(nn.Module):
             momentum: 动量系数。
         """
         for target_param, online_param in zip(
-            self.target_dino_encoder.parameters(), self.lora_dino_encoder.parameters()
+            self.target_vit_encoder.parameters(), self.lora_vit_encoder.parameters()
         ):
             target_param.data.mul_(momentum).add_(online_param.data, alpha=1.0 - momentum)
 
@@ -250,19 +249,19 @@ class W4DModel(nn.Module):
         self,
         features: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        def get_dino_input_image(image_feature):
+        def get_vit_input_image(image_feature):
             batch_size, num_views, height, width, channels = image_feature.shape
-            inputs = self.dino_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
+            inputs = self.vit_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
             return inputs.pixel_values.reshape(batch_size, num_views, channels, *inputs.pixel_values.shape[-2:])
 
-        all_frames_dino_input = torch.stack(
+        all_frames_vit_input = torch.stack(
             [
-                get_dino_input_image(features['camera_feature_prev_3']['dino_feature']),
-                get_dino_input_image(features['camera_feature']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_2']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_4']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_6']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_8']['dino_feature']),
+                get_vit_input_image(features['camera_feature_prev_3']['dino_feature']),
+                get_vit_input_image(features['camera_feature']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_2']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_4']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_6']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_8']['dino_feature']),
             ], dim=1
         )
     
@@ -291,17 +290,17 @@ class W4DModel(nn.Module):
         cmd = all_frames_status_feature[..., :4]  # [bs, num_frames, 4] one-hot
         cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
 
-        batch_size, num_frames, num_views, _, _, _ = all_frames_dino_input.shape
+        batch_size, num_frames, num_views, _, _, _ = all_frames_vit_input.shape
         device = self.scene_embeds.device
 
-        # ==================== Dino Encoder with scene query =================
+        # ==================== vit Encoder with scene query =================
         init_scene_query = self.scene_embeds.repeat(batch_size, 1, 1, 1, 1)
-        batch_size, num_frames, num_views, num_query_tokens, dino_dim = init_scene_query.shape
-        init_scene_query = init_scene_query.reshape(batch_size * num_frames * num_views, num_query_tokens, dino_dim)
+        batch_size, num_frames, num_views, num_query_tokens, vit_dim = init_scene_query.shape
+        init_scene_query = init_scene_query.reshape(batch_size * num_frames * num_views, num_query_tokens, vit_dim)
 
-        image_scene_query = self.get_dino_features_with_scene_query(
-            self.lora_dino_encoder, 
-            all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+        image_scene_query = self.get_vit_features_with_scene_query(
+            self.lora_vit_encoder, 
+            all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
             init_scene_query
         ).last_hidden_state
 
@@ -314,14 +313,14 @@ class W4DModel(nn.Module):
         keyval_final = keyval
 
         if not self.is_eval:
-            # target_dino_encoder 提取未来 dino feature 作为 gt
+            # target_vit_encoder 提取未来 vit feature 作为 gt
             with torch.no_grad():
                 # detach init_scene_query，断开与 self.scene_embeds 的计算图连接
                 init_scene_query_detached = init_scene_query.detach()
                 
-                gt_scene_query = self.get_dino_features_with_scene_query(
-                    self.target_dino_encoder, 
-                    all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+                gt_scene_query = self.get_vit_features_with_scene_query(
+                    self.target_vit_encoder, 
+                    all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
                     init_scene_query_detached  # ✅ 使用 detach 后的 query
                 ).last_hidden_state
                 
@@ -362,11 +361,11 @@ class W4DModel(nn.Module):
         # print(f"ego_query_decoder time: {time.time() - start_time}")
         ##============================== 轨迹特征提取 ======================================
 
-        # predict geometry feature from dino_feature
-        dino_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
+        # predict geometry feature from vit_feature
+        vit_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
         # init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1, 1)
-        # geometry_feature_pred = self.geometry_decoder(dino_full_feature.reshape(batch_size, -1, dim), dino_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
-        geometry_feature_align = self.geometry_projector(dino_full_feature)  # [bs, num_frames, num_views, 512, 2048]
+        # geometry_feature_pred = self.geometry_decoder(vit_full_feature.reshape(batch_size, -1, dim), vit_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
+        geometry_feature_align = self.geometry_projector(vit_full_feature)  # [bs, num_frames, num_views, 512, 2048]
 
 
         # wm
@@ -402,27 +401,27 @@ class W4DModel(nn.Module):
         self,
         features: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        # unpack the camera_feature to get dino feature and geometry feature
-        # dino_feature, geometry_feature = features['camera_feature']
-        def get_dino_input_image(image_feature):
+        # unpack the camera_feature to get vit feature and geometry feature
+        # vit_feature, geometry_feature = features['camera_feature']
+        def get_vit_input_image(image_feature):
             batch_size, num_views, height, width, channels = image_feature.shape
-            inputs = self.dino_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
+            inputs = self.vit_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
             return inputs.pixel_values.reshape(batch_size, num_views, channels, *inputs.pixel_values.shape[-2:])
 
-        all_frames_dino_input = torch.stack(
+        all_frames_vit_input = torch.stack(
             [
-                get_dino_input_image(features['camera_feature_prev_3']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_prev_2']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_prev_1']['dino_feature']),
-                get_dino_input_image(features['camera_feature']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_1']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_2']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_3']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_4']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_5']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_6']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_7']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_8']['dino_feature']),
+                get_vit_input_image(features['camera_feature_prev_3']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_prev_2']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_prev_1']['dino_feature']),
+                get_vit_input_image(features['camera_feature']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_1']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_2']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_3']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_4']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_5']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_6']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_7']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_8']['dino_feature']),
             ], dim=1
         )
 
@@ -458,20 +457,20 @@ class W4DModel(nn.Module):
         cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
 
 
-        batch_size, num_frames, num_views, _, _, _ = all_frames_dino_input.shape
+        batch_size, num_frames, num_views, _, _, _ = all_frames_vit_input.shape
         device= self.scene_embeds.device
 
-        # ==================== Dino Encoder with scene query =================
-        # v2: use learnable query do cross attention with each view dino feature
+        # ==================== vit Encoder with scene query =================
+        # v2: use learnable query do cross attention with each view vit feature
 
-        # lora_dino_encoder 提取历史 dino feature 作为 keyval
+        # lora_vit_encoder 提取历史 vit feature 作为 keyval
         init_scene_query = self.scene_embeds.repeat(batch_size, 1, 1, 1, 1)  # [1, num_frames, num_views, 16, 384] -> [bs, num_frames, num_views, 16, 384]
-        batch_size, num_frames, num_views, num_query_tokens, dino_dim = init_scene_query.shape  # [bs, 4, 3, 16, 384]
-        init_scene_query = init_scene_query.reshape(batch_size * num_frames, num_views * num_query_tokens, dino_dim)  # [bs*4, 3*16, 384]
+        batch_size, num_frames, num_views, num_query_tokens, vit_dim = init_scene_query.shape  # [bs, 4, 3, 16, 384]
+        init_scene_query = init_scene_query.reshape(batch_size * num_frames, num_views * num_query_tokens, vit_dim)  # [bs*4, 3*16, 384]
 
-        image_scene_query = self.get_dino_features_with_scene_query(
-            self.lora_dino_encoder, 
-            all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+        image_scene_query = self.get_vit_features_with_scene_query(
+            self.lora_vit_encoder, 
+            all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
             init_scene_query
         ).last_hidden_state  # [bs*4, 48+512*3, 256]
 
@@ -484,14 +483,14 @@ class W4DModel(nn.Module):
         keyval = keyval.clone() + self._keyval_embedding.weight[None, None, ...]
         keyval_final = keyval  # [bs, 4, 48+1, 256]
 
-        # target_dino_encoder 提取未来 dino feature 作为 gt
+        # target_vit_encoder 提取未来 vit feature 作为 gt
         with torch.no_grad():
             # detach init_scene_query，断开与 self.scene_embeds 的计算图连接
             init_scene_query_detached = init_scene_query.detach()
             
-            gt_scene_query = self.get_dino_features_with_scene_query(
-                self.target_dino_encoder, 
-                all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+            gt_scene_query = self.get_vit_features_with_scene_query(
+                self.target_vit_encoder, 
+                all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
                 init_scene_query_detached  # ✅ 使用 detach 后的 query
             ).last_hidden_state
             
@@ -529,11 +528,11 @@ class W4DModel(nn.Module):
         # print(f"ego_query_decoder time: {time.time() - start_time}")
         ##============================== 轨迹特征提取 ======================================
 
-        # predict geometry feature from dino_feature
-        dino_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
+        # predict geometry feature from vit_feature
+        vit_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
         # init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1, 1)
-        # geometry_feature_pred = self.geometry_decoder(dino_full_feature.reshape(batch_size, -1, dim), dino_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
-        geometry_feature_align = self.geometry_projector(dino_full_feature)  # [bs, num_frames, num_views, 512, 2048]
+        # geometry_feature_pred = self.geometry_decoder(vit_full_feature.reshape(batch_size, -1, dim), vit_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
+        geometry_feature_align = self.geometry_projector(vit_full_feature)  # [bs, num_frames, num_views, 512, 2048]
 
         # wm
         if self.use_wm:
@@ -588,19 +587,19 @@ class W4DModel(nn.Module):
             hash_val = (global_step * 2654435761) % 10000 / 10000.0  # 使用乘法哈希得到 [0, 1)
             use_autoregressive = hash_val < ar_ratio
         
-        def get_dino_input_image(image_feature):
+        def get_vit_input_image(image_feature):
             batch_size, num_views, height, width, channels = image_feature.shape
-            inputs = self.dino_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
+            inputs = self.vit_processor(images=image_feature.reshape(batch_size * num_views, height, width, channels), return_tensors="pt").to('cuda')
             return inputs.pixel_values.reshape(batch_size, num_views, channels, *inputs.pixel_values.shape[-2:])
 
-        all_frames_dino_input = torch.stack(
+        all_frames_vit_input = torch.stack(
             [
-                get_dino_input_image(features['camera_feature_prev_3']['dino_feature']),
-                get_dino_input_image(features['camera_feature']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_2']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_4']['dino_feature']),
-                # get_dino_input_image(features['camera_feature_next_6']['dino_feature']),
-                get_dino_input_image(features['camera_feature_next_8']['dino_feature']),
+                get_vit_input_image(features['camera_feature_prev_3']['dino_feature']),
+                get_vit_input_image(features['camera_feature']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_2']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_4']['dino_feature']),
+                # get_vit_input_image(features['camera_feature_next_6']['dino_feature']),
+                get_vit_input_image(features['camera_feature_next_8']['dino_feature']),
             ], dim=1
         )
 
@@ -632,17 +631,17 @@ class W4DModel(nn.Module):
         cmd = all_frames_status_feature[..., :4]  # [bs, num_frames, 4] one-hot
         cmd = torch.argmax(cmd, dim=-1)  # [bs, num_frames] int
 
-        batch_size, num_frames, num_views, _, _, _ = all_frames_dino_input.shape
+        batch_size, num_frames, num_views, _, _, _ = all_frames_vit_input.shape
         device = self.scene_embeds.device
 
-        # ==================== Dino Encoder with scene query =================
+        # ==================== vit Encoder with scene query =================
         init_scene_query = self.scene_embeds.repeat(batch_size, 1, 1, 1, 1)
-        batch_size, num_frames, num_views, num_query_tokens, dino_dim = init_scene_query.shape
-        init_scene_query = init_scene_query.reshape(batch_size * num_frames * num_views, num_query_tokens, dino_dim)
+        batch_size, num_frames, num_views, num_query_tokens, vit_dim = init_scene_query.shape
+        init_scene_query = init_scene_query.reshape(batch_size * num_frames * num_views, num_query_tokens, vit_dim)
 
-        image_scene_query = self.get_dino_features_with_scene_query(
-            self.lora_dino_encoder, 
-            all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+        image_scene_query = self.get_vit_features_with_scene_query(
+            self.lora_vit_encoder, 
+            all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
             init_scene_query
         ).last_hidden_state
 
@@ -654,12 +653,12 @@ class W4DModel(nn.Module):
         keyval = keyval.clone() + self._keyval_embedding.weight[None, None, ...]
         keyval_final = keyval
 
-        # target_dino_encoder 提取未来 dino feature 作为 gt
+        # target_vit_encoder 提取未来 vit feature 作为 gt
         with torch.no_grad():
             init_scene_query_detached = init_scene_query.detach()
-            gt_scene_query = self.get_dino_features_with_scene_query(
-                self.target_dino_encoder, 
-                all_frames_dino_input.reshape(-1, *all_frames_dino_input.shape[-3:]), 
+            gt_scene_query = self.get_vit_features_with_scene_query(
+                self.target_vit_encoder, 
+                all_frames_vit_input.reshape(-1, *all_frames_vit_input.shape[-3:]), 
                 init_scene_query_detached
             ).last_hidden_state
             gt_scene_query = gt_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., :self._config.num_scene_query_token, :]
@@ -689,11 +688,11 @@ class W4DModel(nn.Module):
         )
 
 
-        # predict geometry feature from dino_feature
-        dino_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
+        # predict geometry feature from vit_feature
+        vit_full_feature = image_scene_query.reshape(batch_size, num_frames, num_views, -1, dim)[..., self._config.num_scene_query_token+1:, :]  # [bs, num_frames, num_views, 512, 256] (513 token 减去 cls token)
         # init_geometry_query = self.geometry_query.repeat(batch_size, 1, 1, 1, 1)
-        # geometry_feature_pred = self.geometry_decoder(dino_full_feature.reshape(batch_size, -1, dim), dino_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
-        geometry_feature_align = self.geometry_projector(dino_full_feature)  # [bs, num_frames, num_views, 512, 2048]
+        # geometry_feature_pred = self.geometry_decoder(vit_full_feature.reshape(batch_size, -1, dim), vit_full_feature.reshape(batch_size, -1, dim)).reshape(batch_size, num_frames, num_views, -1, dim)
+        geometry_feature_align = self.geometry_projector(vit_full_feature)  # [bs, num_frames, num_views, 512, 2048]
 
         # wm - 基于 ar_ratio 选择不同的训练模式
         if self.use_wm:

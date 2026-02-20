@@ -94,7 +94,7 @@ def main(cfg: DictConfig) -> None:
 
     logger.info("Building Agent")
     agent: AbstractAgent = instantiate(cfg.agent)
-    agent.initialize()
+    # agent.initialize()
 
     logger.info("Building Lightning Module")
     lightning_module = AgentLightningModule(

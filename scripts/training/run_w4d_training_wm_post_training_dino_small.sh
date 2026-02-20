@@ -14,7 +14,7 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr2e_4_wm_post_training
+experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry_only/256_50_epoch_lr3e_4_wm_post_training_dino_small
 
 # 分阶段训练调度说明 (wm_loss_weight=0.6, geometry_loss_weight=0.6):
 # Epoch 0~19:   WM=0,     Geo=0.6  → 阶段1: 纯 geometry + traj（20 个 epoch 充分蒸馏几何）
@@ -37,14 +37,14 @@ torchrun \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/feature_cache_navtrain \
-    agent.checkpoint_path="'/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr5e_4_geometry_only/2026.02.17.15.51.07/lightning_logs/version_0/checkpoints/epoch=49-step=10100.ckpt'" \
-    agent.config.model_version='dino_wm_post_training' \
+    agent.checkpoint_path="'/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry_only/256_50_epoch_lr3e_4_geometry_only_dino_small/2026.02.19.10.37.10/lightning_logs/version_0/checkpoints/epoch=49-step=20200.ckpt'" \
+    agent.config.model_version='dino_small_wm_post_training' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
     agent.config.num_frames=4 \
-    agent.config.num_scene_query_token=32 \
+    agent.config.num_scene_query_token=16 \
     agent.config.tf_d_model=256 \
     agent.config.tf_d_ffn=1024 \
     agent.config.wm_loss_weight=0.6 \
@@ -52,10 +52,10 @@ torchrun \
     agent.config.use_staged_loss=False \
     agent.config.curriculum_start_epoch=100 \
     agent.config.curriculum_end_epoch=100 \
-    agent.lr=2e-4 \
+    agent.lr=3e-4 \
     trainer.params.num_nodes=$MLP_WORKER_NUM \
     trainer.params.devices=8 \
     worker.threads_per_node=14 \
     trainer.params.precision='bf16-mixed' \
     trainer.params.accumulate_grad_batches=1 \
-    trainer.params.max_epochs=100 \
+    trainer.params.max_epochs=50 \
