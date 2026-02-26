@@ -102,6 +102,7 @@ class TransfuserConfig:
     agent_class_weight: float = 10.0
     agent_box_weight: float = 1.0
     bev_semantic_weight: float = 10.0
+    ego_status_loss_weight: float = 0.2
 
     # BEV mapping
     bev_semantic_classes = {

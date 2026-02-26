@@ -15,4 +15,4 @@ while True:
     outputs = model(**inputs)
     last_hidden_states = outputs.last_hidden_state
     print(last_hidden_states.shape)
-    time.sleep(1)
+    # time.sleep(1)

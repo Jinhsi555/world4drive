@@ -124,16 +124,16 @@ class WorldAdapterFeatureBuilder(AbstractFeatureBuilder):
         frame_tokens = [frame.token for frame in scene.frames[:-2]]
         
         final_features["camera_feature"] = frame_tokens[3]
-        # final_features["camera_feature_prev_1"] = frame_tokens[2]
-        # final_features["camera_feature_prev_2"] = frame_tokens[1]
+        final_features["camera_feature_prev_1"] = frame_tokens[2]
+        final_features["camera_feature_prev_2"] = frame_tokens[1]
         final_features["camera_feature_prev_3"] = frame_tokens[0]
-        # final_features["camera_feature_next_1"] = frame_tokens[4]
-        # final_features["camera_feature_next_2"] = frame_tokens[5]
-        # final_features["camera_feature_next_3"] = frame_tokens[6]
+        final_features["camera_feature_next_1"] = frame_tokens[4]
+        final_features["camera_feature_next_2"] = frame_tokens[5]
+        final_features["camera_feature_next_3"] = frame_tokens[6]
         final_features["camera_feature_next_4"] = frame_tokens[7]
-        # final_features["camera_feature_next_5"] = frame_tokens[8]
-        # final_features["camera_feature_next_6"] = frame_tokens[9]
-        # final_features["camera_feature_next_7"] = frame_tokens[10]
+        final_features["camera_feature_next_5"] = frame_tokens[8]
+        final_features["camera_feature_next_6"] = frame_tokens[9]
+        final_features["camera_feature_next_7"] = frame_tokens[10]
         final_features["camera_feature_next_8"] = frame_tokens[11]
         
         camera_inputs = self._get_camera_feature(agent_input)
@@ -150,38 +150,38 @@ class WorldAdapterFeatureBuilder(AbstractFeatureBuilder):
         # features['camera'],features['intrinsics']=self._get_camera_intrinsics_feature(agent_input)
         # dino_camera_feature = self.dino_processor(images=camera_feature, return_tensors="pt").to(self.device)
         features["camera_feature"] = {
-            'dino_feature': image_path,
+            'dino_feature': image_input,
             'geometry_feature': self.get_geometry_feature(camera_inputs)
         }
 
         ## 添加前几帧的信息
         camera_feature_prev_1, camera_feature_prev_2, camera_feature_prev_3 = self._get_camera_feature_prev(agent_input)
-        # features["camera_feature_prev_1"] = {
-        #     'dino_feature': camera_feature_prev_1[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_prev_1)
-        # }
-        # features["camera_feature_prev_2"] = {
-        #     'dino_feature': camera_feature_prev_2[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_prev_2)
-        # }
+        features["camera_feature_prev_1"] = {
+            'dino_feature': camera_feature_prev_1[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_prev_1)
+        }
+        features["camera_feature_prev_2"] = {
+            'dino_feature': camera_feature_prev_2[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_prev_2)
+        }
         features["camera_feature_prev_3"] = {
-            'dino_feature': camera_feature_prev_3[1],
+            'dino_feature': camera_feature_prev_3[0],
             'geometry_feature': self.get_geometry_feature(camera_feature_prev_3)
         }
-        # final_features['status_feature_prev_1'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[2].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[2].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[2].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
-        # final_features['status_feature_prev_2'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[1].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[1].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[1].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
+        final_features['status_feature_prev_1'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[2].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[2].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[2].ego_acceleration, dtype=torch.float32),
+            ],
+        )
+        final_features['status_feature_prev_2'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[1].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[1].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[1].ego_acceleration, dtype=torch.float32),
+            ],
+        )
         final_features['status_feature_prev_3'] = torch.concatenate(
             [
                 torch.tensor(agent_input.ego_statuses[0].driving_command, dtype=torch.float32),
@@ -192,60 +192,60 @@ class WorldAdapterFeatureBuilder(AbstractFeatureBuilder):
 
         # 添加后几帧的信息
         camera_feature_next_1, camera_feature_next_2, camera_feature_next_3, camera_feature_next_4, camera_feature_next_5, camera_feature_next_6, camera_feature_next_7, camera_feature_next_8 = self._get_camera_feature_next(agent_input)
-        # features["camera_feature_next_1"] = {
-        #     'dino_feature': camera_feature_next_1[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_1)
-        # }
-        # features["camera_feature_next_2"] = {
-        #     'dino_feature': camera_feature_next_2[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_2)
-        # }
-        # features["camera_feature_next_3"] = {
-        #     'dino_feature': camera_feature_next_3[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_3)
-        # }
+        features["camera_feature_next_1"] = {
+            'dino_feature': camera_feature_next_1[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_1)
+        }
+        features["camera_feature_next_2"] = {
+            'dino_feature': camera_feature_next_2[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_2)
+        }
+        features["camera_feature_next_3"] = {
+            'dino_feature': camera_feature_next_3[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_3)
+        }
         features["camera_feature_next_4"] = {
-            'dino_feature': camera_feature_next_4[1],
+            'dino_feature': camera_feature_next_4[0],
             'geometry_feature': self.get_geometry_feature(camera_feature_next_4)
         }
-        # features["camera_feature_next_5"] = {
-        #     'dino_feature': camera_feature_next_5[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_5)
-        # }
-        # features["camera_feature_next_6"] = {
-        #     'dino_feature': camera_feature_next_6[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_6)
-        # }
-        # features["camera_feature_next_7"] = {
-        #     'dino_feature': camera_feature_next_7[0],
-        #     'geometry_feature': self.get_geometry_feature(camera_feature_next_7)
-        # }
+        features["camera_feature_next_5"] = {
+            'dino_feature': camera_feature_next_5[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_5)
+        }
+        features["camera_feature_next_6"] = {
+            'dino_feature': camera_feature_next_6[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_6)
+        }
+        features["camera_feature_next_7"] = {
+            'dino_feature': camera_feature_next_7[0],
+            'geometry_feature': self.get_geometry_feature(camera_feature_next_7)
+        }
         features["camera_feature_next_8"] = {
-            'dino_feature': camera_feature_next_8[1],
+            'dino_feature': camera_feature_next_8[0],
             'geometry_feature': self.get_geometry_feature(camera_feature_next_8)
         }
         
-        # final_features['status_feature_next_1'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[4].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[4].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[4].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
-        # final_features['status_feature_next_2'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[5].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[5].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[5].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
-        # final_features['status_feature_next_3'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[6].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[6].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[6].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
+        final_features['status_feature_next_1'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[4].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[4].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[4].ego_acceleration, dtype=torch.float32),
+            ],
+        )
+        final_features['status_feature_next_2'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[5].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[5].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[5].ego_acceleration, dtype=torch.float32),
+            ],
+        )
+        final_features['status_feature_next_3'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[6].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[6].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[6].ego_acceleration, dtype=torch.float32),
+            ],
+        )
         final_features['status_feature_next_4'] = torch.concatenate(
             [
                 torch.tensor(agent_input.ego_statuses[7].driving_command, dtype=torch.float32),
@@ -253,27 +253,27 @@ class WorldAdapterFeatureBuilder(AbstractFeatureBuilder):
                 torch.tensor(agent_input.ego_statuses[7].ego_acceleration, dtype=torch.float32),
             ],
         )
-        # final_features['status_feature_next_5'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[8].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[8].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[8].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
-        # final_features['status_feature_next_6'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[9].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[9].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[9].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
-        # final_features['status_feature_next_7'] = torch.concatenate(
-        #     [
-        #         torch.tensor(agent_input.ego_statuses[10].driving_command, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[10].ego_velocity, dtype=torch.float32),
-        #         torch.tensor(agent_input.ego_statuses[10].ego_acceleration, dtype=torch.float32),
-        #     ],
-        # )
+        final_features['status_feature_next_5'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[8].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[8].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[8].ego_acceleration, dtype=torch.float32),
+            ],
+        )
+        final_features['status_feature_next_6'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[9].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[9].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[9].ego_acceleration, dtype=torch.float32),
+            ],
+        )
+        final_features['status_feature_next_7'] = torch.concatenate(
+            [
+                torch.tensor(agent_input.ego_statuses[10].driving_command, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[10].ego_velocity, dtype=torch.float32),
+                torch.tensor(agent_input.ego_statuses[10].ego_acceleration, dtype=torch.float32),
+            ],
+        )
         final_features['status_feature_next_8'] = torch.concatenate(
             [
                 torch.tensor(agent_input.ego_statuses[11].driving_command, dtype=torch.float32),

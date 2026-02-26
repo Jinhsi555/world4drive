@@ -14,14 +14,14 @@ SYNTHETIC_SENSOR_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/sensor_blobs
 SYNTHETIC_SCENES_PATH=$OPENSCENE_DATA_ROOT/navhard_two_stage/synthetic_scene_pickles
 split=navtest
 agent=transfuser_agent
-dir=training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop_gt_geometry/navtest_eval_one_stage_train_all_refine
+dir=training_w4d_agent_4mode_navtrain_all_dino_geometry_ablation/512_100_epoch_lr2e_4_no_refine_dino_base_8frames_with_layernormed/navtest_eval_one_stage_train_all_first
 metric_cache_path="${NAVSIM_EXP_ROOT}/metric_cache"
 cd ${NAVSIM_DEVKIT_ROOT}
-ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry/512_100_epoch_lr_5e_4_open_loop_gt_geometry/2026.02.11.18.02.38/lightning_logs/version_0/checkpoints
+ckpt_dir=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/training_w4d_agent_4mode_navtrain_all_dino_geometry_ablation/512_100_epoch_lr2e_4_no_refine_dino_base_8frames_with_layernormed/2026.02.22.09.25.28/lightning_logs/version_0/checkpoints
 
 # 并行相关配置 (可通过环境变量覆盖)
 GPU_IDS=${GPU_IDS:-"0,1,2,3,4,5,6,7"}   # 逗号分隔 GPU id 列表
-MAX_PROCS=${MAX_PROCS:-8}                 # 期望最大并发任务数（含等待调度）
+MAX_PROCS=${MAX_PROCS:-4}                 # 期望最大并发任务数（含等待调度）
 SKIP_EXISTING=${SKIP_EXISTING:-1}         # =1 如果已经有对应 pkl 则跳过
 LOG_DIR_SUFFIX=${LOG_DIR_SUFFIX:-eval_logs_${split}}
 
@@ -146,20 +146,22 @@ launch_eval() {
           +trainer.params.devices=1 \
           trainer.params.num_nodes=1 \
           experiment_name=${experiment_name} \
-          cache_path="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/feature_cache_navtest" \
+          cache_path="/vepfs-mlp2/c20250502/haoce/wlb/world4drive/exp/all_frames_feature_cache_test" \
           metric_cache_path=${metric_cache_path} \
           train_test_split=${split} \
-          agent.config.model_version='dino_gt_geometry_openloop' \
+          agent.config.model_version='dino_base_geometry_no_refine_with_ego_status_8frames' \
           agent.config.num_mode=4 \
-          agent.config.num_frames=3 \
+          agent.config.num_frames=8 \
+          agent.config.num_scene_query_token=16 \
           agent.config.use_wm=True \
+          agent.config.dino_d_model=768 \
           agent.config.tf_d_model=256 \
           agent.config.tf_d_ffn=1024 \
-          +agent.config.traj_mode='refine' \
+          +agent.config.traj_mode='first' \
           agent.config.is_eval=True \
           agent.config.use_cmd_embed=False \
           traffic_agents=non_reactive \
-          worker.threads_per_node=14 \
+          worker.threads_per_node=24 \
           dataloader.params.batch_size=8 \
 
 

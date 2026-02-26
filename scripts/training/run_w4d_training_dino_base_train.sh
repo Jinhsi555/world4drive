@@ -14,7 +14,8 @@ export PYTHONPATH=/vepfs-mlp2/c20250502/haoce/wlb/world4drive/worldmirror:$PYTHO
 
 config="all_navtrain_training" # this config uses the entire navtrain dataset for training
 TRAIN_TEST_SPLIT=navtrain
-experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry_ablation/ablation5_0to8
+experiment_name=training_w4d_agent_4mode_navtrain_all_dino_geometry_ablation/512_100_epoch_lr2e_4_no_refine_dino_base_4frames_without_layernormed_with_ego_status_without_validation
+
 torchrun \
     --nnodes=$MLP_WORKER_NUM \
     --nproc_per_node=8 \
@@ -22,7 +23,6 @@ torchrun \
     --master_addr=$MLP_WORKER_0_HOST \
     --master_port=$MLP_WORKER_0_PORT \
     $NAVSIM_DEVKIT_ROOT/navsim/planning/script/run_training.py \
-    --config-name ${config} \
     agent=transfuser_agent \
     dataloader.params.batch_size=8 \
     dataloader.params.num_workers=12 \
@@ -31,12 +31,12 @@ torchrun \
     use_cache_without_dataset=True \
     force_cache_computation=False \
     cache_path=$NAVSIM_EXP_ROOT/feature_cache_navtrain \
-    agent.config.model_version='ablation5' \
+    agent.config.model_version='dino_base_geometry_no_refine_with_ego_status' \
     agent.config.num_mode=4 \
     agent.config.traj_cmd_loss_weight=0 \
     agent.config.use_cmd_embed=False \
     agent.config.use_wm=True \
-    agent.config.num_frames=2 \
+    agent.config.num_frames=4 \
     agent.config.num_scene_query_token=16 \
     agent.config.dino_d_model=768 \
     agent.config.tf_d_model=256 \

@@ -133,6 +133,22 @@ class TransfuserAgent(AbstractAgent):
             from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine import W4DModel
         elif self._config.model_version == 'vit_base_geometry_no_refine':
             from navsim.agents.transfuser.w4d_model_vit_base_geometry_no_refine import W4DModel
+        elif self._config.model_version == 'dino_base_geometry_no_refine_with_ego_status':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_with_ego_status import W4DModel
+        elif self._config.model_version == 'dino_base_lora_geometry_no_refine_with_ego_status':
+            from navsim.agents.transfuser.w4d_model_dino_base_lora_geometry_no_refine_with_ego_status import W4DModel
+        elif self._config.model_version == 'dino_base_geometry_no_refine_with_ego_status_8frames':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_with_ego_status_8frames import W4DModel
+        elif self._config.model_version == 'ablation1':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_ablation1 import W4DModel
+        elif self._config.model_version == 'ablation2':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_ablation2 import W4DModel
+        elif self._config.model_version == 'ablation3':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_ablation3 import W4DModel
+        elif self._config.model_version == 'ablation4':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_ablation4 import W4DModel
+        elif self._config.model_version == 'ablation5':
+            from navsim.agents.transfuser.w4d_model_dino_base_geometry_no_refine_ablation5 import W4DModel
 
         if self._config.model_name == "W4D":
             self._transfuser_model = W4DModel(config)

@@ -262,7 +262,7 @@ class AgentLightningModule(pl.LightningModule):
                 elif self._cfg.use_wm and self._cfg.traj_mode == 'gt':
                     prediction = self.agent.forward_train(features)['refined_traj']
                 else:
-                    prediction = self.agent.forward_test(features)
+                    prediction = self.agent.forward_test(features)['first_traj']
 
                 poses = prediction['trajectory'].cpu().float().numpy()  # (B, T, 3)
                 cls_logits = prediction['cls_logits'].cpu().float().numpy()

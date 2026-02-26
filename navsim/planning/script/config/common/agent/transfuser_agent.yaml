@@ -39,6 +39,7 @@ config:
   use_wm: false
   wm_loss_weight: 0.2
   geometry_loss_weight: 0.1
+  ego_status_loss_weight: 0.2
   use_ar: false
   use_ar_wm: false
   action_chunk_size : 4
